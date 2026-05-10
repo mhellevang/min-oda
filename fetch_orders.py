@@ -23,15 +23,10 @@ console = Console()
 DATA_DIR = Path(__file__).parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
 
-# Sannsynlige endepunkter basert på vanlige Django/DRF-mønstre.
-# Hvis ingen treffer må du finne riktig URL i Firefox DevTools (Network-fanen)
-# mens du åpner "Mine ordre" på oda.com, og kjøre scriptet med --url.
-CANDIDATE_LIST_ENDPOINTS = [
-    "https://oda.com/api/v1/users/me/order_history/",
-    "https://oda.com/api/v1/orders/",
-    "https://oda.com/api/v1/user/orders/",
-    "https://oda.com/api/v2/orders/",
-]
+# Endepunkt vi vet virker per mai 2026. Hvis Oda endrer det, finn ny URL
+# i Firefox DevTools (Network-fanen) mens du åpner "Mine ordre" og kjør
+# scriptet med --url.
+ORDERS_ENDPOINT = "https://oda.com/api/v1/orders/"
 
 
 def build_client() -> httpx.Client:
@@ -166,19 +161,8 @@ def main() -> None:
             save(data, f"order_{args.order}.json")
         return
 
-    if args.url:
-        endpoints = [args.url]
-    else:
-        endpoints = CANDIDATE_LIST_ENDPOINTS
-
-    orders: list = []
-    used_url: str | None = None
-    for url in endpoints:
-        result = fetch_with_pagination(client, url)
-        if result:
-            orders = result
-            used_url = url
-            break
+    used_url = args.url or ORDERS_ENDPOINT
+    orders = fetch_with_pagination(client, used_url)
 
     if not orders:
         console.print(
@@ -232,19 +216,10 @@ def main() -> None:
         if out.exists():
             continue
 
-        # Prøv kandidat-URLer for detaljer i rekkefølge
-        candidates = [
-            order.get("url"),
-            order.get("detail_url"),
-            f"https://oda.com/api/v1/orders/{order_id}/",
-            f"https://oda.com/api/v1/orders/{order_id}/items/",
-            f"https://oda.com/api/v1/orders/{order_id}/lines/",
-        ]
-        for url in [c for c in candidates if c]:
-            data = try_get(client, url)
-            if data:
-                out.write_text(json.dumps(data, indent=2, ensure_ascii=False))
-                break
+        url = order.get("url") or f"https://oda.com/api/v1/orders/{order_id}/"
+        data = try_get(client, url)
+        if data:
+            out.write_text(json.dumps(data, indent=2, ensure_ascii=False))
         if i % 5 == 0:
             console.print(f"  {i}/{len(orders)}")
         time.sleep(0.4)
