@@ -73,6 +73,18 @@ månedlig KPI for matvarer fra SSB (tabell 03013) og sammenlignes — godt
 egnet til å se om din kurv har bevegd seg annerledes enn snittet i Norge.
 Lagrer `plots/price_index.png`.
 
+```sh
+uv run basket.py
+uv run basket.py --product "kokosmelk"
+uv run basket.py --min-orders 8 --top 25
+```
+
+Basket-analyse: hvilke produkter havner ofte i samme ordre? Viser topp par
+etter *lift* (mest overraskende kombinasjoner) og *støtte* (mest vanlige
+kombinasjoner). Med `--product` får du et oppslag for ett spesifikt produkt
+— "når jeg kjøper X, hva følger med?". `--min-orders` styrer hvor sjeldne
+produkter må filtreres bort før de inngår i parene.
+
 ## Lag handleliste på oda.com
 
 ```sh
