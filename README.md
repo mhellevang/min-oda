@@ -60,6 +60,19 @@ kategorier topper hvilke måneder, og sommerferie-gapet. Lager også
 `plots/monthly_spend.png`. Med `--cutoff` får du en før/etter-sammenligning
 rundt en valgt dato (livshendelse, flytting, etc.) og en markør på grafen.
 
+```sh
+uv run prices.py
+uv run prices.py --ssb              # sammenlign mot SSB KPI matvarer
+uv run prices.py --since 2022 --top 30
+```
+
+Prisanalyse: personlig matprisindeks per kvartal (veid Carli — hvert produkt
+ankret til sin egen første-pris), per-produkt prisutvikling med største opp-
+og nedganger, og MVA-mix (15% mat vs 25% non-food) per år. Med `--ssb` hentes
+månedlig KPI for matvarer fra SSB (tabell 03013) og sammenlignes — godt
+egnet til å se om din kurv har bevegd seg annerledes enn snittet i Norge.
+Lagrer `plots/price_index.png`.
+
 ## Lag handleliste på oda.com
 
 ```sh
