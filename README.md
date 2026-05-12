@@ -120,14 +120,47 @@ inn som base64, så filen kan deles uten støtte-filer.
 ## Lag handleliste på oda.com
 
 ```sh
-uv run build_list.py            # forhåndsvisning
-uv run build_list.py --create   # opprett listen på oda.com
+uv run build_list.py                       # forhåndsvisning
+uv run build_list.py --create              # opprett listen på oda.com
+uv run build_list.py --cycle 7             # ukentlig syklus (default 14 d)
+uv run build_list.py --max-per-category 12 # mer plass i kategorier med
+                                           # mange staples (f.eks. Meieri)
 ```
 
-Bygger en kuratert liste med faste varer basert på handlemønsteret siste
-12 mnd. Filtrerer bort størrelses-kodede produkter (bleier, melk-trinn,
-babymat 4/6/8 mnd) som ikke er kjøpt siste ~4 mnd, slik at utvokste
-størrelser ikke havner på listen. Bruk `--title "..."` for å velge navn.
+Bygger på `restock.compute_cadence(by_type=True)`: for hver varetype med
+stabil kjøpsrytme velges produktet med flest distinkte ordrer som
+representant, og antall settes til `ceil(syklus / median-intervall)`.
+Melk med 7-dagers kadens får qty=2 på en 14-dagers liste; brød med
+5-dagers kadens får qty=3.
+
+Arver filtrene fra restock: pant/gavekort, forlatte produkter, sjeldne
+kjøp (median > 90 d), og størrelses-kodede varer som vokses ut av.
+
+## Diff mot handlekurv
+
+```sh
+uv run cart_diff.py             # vis varetyper som mangler i kurven
+uv run cart_diff.py --top-up    # ta også med varer i kurv, men for lavt antall
+uv run cart_diff.py --create    # opprett liste med manglene
+```
+
+Sammenligner build_list-resultatet mot innholdet i kurven på oda.com
+(`/api/v1/cart/`) og foreslår hva som mangler. Snittet skjer på
+varetype-nivå — har du allerede TINE Lettmelk i kurven regnes melk-
+behovet som dekket selv om build_list foreslo et annet merke. Det
+forhindrer falske mangler ved merkebytte.
+
+## Makefile
+
+```sh
+make refresh   # hent nye ordrer fra Oda
+make report    # generer HTML-rapport
+make tables    # alle terminal-analyser
+make all       # refresh + report
+```
+
+`build_list` og `cart_diff` er bevisst utelatt fra `make tables` siden de
+har eksterne sideeffekter (oppretter lister på oda.com).
 
 ## Sikkerhet
 
