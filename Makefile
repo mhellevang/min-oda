@@ -1,12 +1,13 @@
 PY ?= uv run python
 
-.PHONY: help refresh report tables basket portrait seasonality restock prices all clean
+.PHONY: help refresh report tables gui basket portrait seasonality restock prices all clean
 
 help:
 	@echo "Targets:"
 	@echo "  refresh  - hent nye ordrer fra Oda"
 	@echo "  report   - generer HTML-rapport (report.py)"
 	@echo "  tables   - kjør alle terminal-analyser"
+	@echo "  gui      - start Streamlit-app i nettleseren"
 	@echo "  all      - refresh + report"
 	@echo "  clean    - slett genererte plots"
 	@echo ""
@@ -34,6 +35,9 @@ prices:
 	$(PY) prices.py
 
 tables: portrait seasonality basket restock prices
+
+gui:
+	uv run streamlit run app.py
 
 all: refresh report
 

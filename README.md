@@ -150,12 +150,24 @@ varetype-nivå — har du allerede TINE Lettmelk i kurven regnes melk-
 behovet som dekket selv om build_list foreslo et annet merke. Det
 forhindrer falske mangler ved merkebytte.
 
+## GUI
+
+```sh
+make gui                       # eller: uv run streamlit run app.py
+```
+
+Streamlit-app med tre faner: **Handleliste** (forhåndsvis og opprett liste
+på oda.com), **Diff mot kurv** (varetyper som mangler i handlekurven), og
+**Restock** (hva forfaller). Sidebar har slidere for syklus, top-n og
+max-per-kategori — samme parametere som CLI-ene.
+
 ## Makefile
 
 ```sh
 make refresh   # hent nye ordrer fra Oda
 make report    # generer HTML-rapport
 make tables    # alle terminal-analyser
+make gui       # start Streamlit-app
 make all       # refresh + report
 ```
 
