@@ -1,17 +1,22 @@
 """Bygger en kuratert handleliste basert på faktiske handlevaner og oppretter
 den på oda.com via /api/v1/product-lists/.
 
+Bygger på `restock.compute_cadence(by_type=True)` — for hver varetype med
+stabil kjøpsrytme velges sist kjøpte produkt som representant, og antall
+beregnes fra listesyklus / median-intervall.
+
 Bruk:
     uv run build_list.py                  # forhåndsvisning, oppretter ingenting
     uv run build_list.py --create         # oppretter listen på oda.com
     uv run build_list.py --title "X"      # egendefinert tittel
+    uv run build_list.py --cycle 7        # ukentlig syklus (default 14 d)
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import re
+import math
 import time
 from pathlib import Path
 
@@ -22,6 +27,8 @@ from rich.table import Table
 
 from fetch_orders import build_client
 from data_loader import load_lines, load_orders
+from product_types import product_type
+from restock import compute_cadence
 
 console = Console()
 
@@ -56,91 +63,62 @@ CATEGORY_PRIORITY = [
     "Husholdning",
 ]
 
-# Produkter vi IKKE vil ha på listen — for sjeldne/kuriøse, eller noe vi
-# heller henter ferskt fra hyllen (krydder, etc.)
-EXCLUDE_KEYWORDS = [
-    "gavekort",
-    "pant",
-]
-
-# Produkter med størrelse/alderstrinn vokses ut av — ikke stol på 12-mnd-frekvens.
-# Treffer "Str. 5", "12-25 kg", "4 mnd", "trinn 2" osv.
-SIZE_CODED_RE = re.compile(
-    r"\bstr\.?\s*\d|\d+\s*-\s*\d+\s*kg|\b\d+\s*mnd\b|\btrinn\s*\d",
-    re.IGNORECASE,
-)
-SIZE_CODED_MAX_AGE_DAYS = 120  # ~4 mnd
-
-
 def load() -> pd.DataFrame:
     orders = load_orders()
     lines = load_lines(orders)
-    return lines
+    return lines.dropna(subset=["product_id", "product_name", "date"])
 
 
-def curate(lines: pd.DataFrame, top_n: int = 40) -> pd.DataFrame:
-    """Velg ut produkter som inngår i 'rytmen': kjøpt mange ganger,
-    fortsatt aktive (siste året), gir bredde over kategoriene."""
+def curate(
+    lines: pd.DataFrame,
+    list_cycle_days: int = 14,
+    top_n: int = 40,
+    max_per_category: int = 4,
+) -> pd.DataFrame:
+    """Bygg handleliste basert på restock-kadens per varetype.
+
+    For hver varetype som har en stabil kjøpsrytme (jf. `compute_cadence`)
+    velges det sist kjøpte produktet som representant, og antall settes til
+    `ceil(syklus / median-intervall)`. Melk med 7-dagers kadens får da
+    qty=2 på en 14-dagers liste; brød med 5-dagers kadens får qty=3.
+
+    Vi arver alle kadens-filtre fra restock.py: pant/gavekort, forlatte
+    produkter, sjeldne kjøp (median > 90 d), størrelses-kodede varer som
+    vokses ut av. Produkter uten klassifisert varetype i `product_types`
+    havner ikke på listen.
+    """
+    cadence = compute_cadence(lines, by_type=True)
+    if cadence.empty:
+        return cadence
+
+    # Finn representativt produkt per varetype: produktet med flest distinkte
+    # ordrer (ikke det sist kjøpte — siste kan være en engangsvariant som
+    # ikke representerer den faste rytmen).
     df = lines.dropna(subset=["product_id", "product_name", "category"]).copy()
     df["product_id"] = df["product_id"].astype(int)
-
-    cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=365)
-    recent = df[df["date"] >= cutoff]
-
-    # Aggregér per produkt
-    agg = (
-        recent.groupby(["product_id", "product_name", "category"])
-        .agg(
-            ganger=("order_id", "nunique"),
-            sum_qty=("quantity", "sum"),
-            mean_qty=("quantity", "mean"),
-            siste=("date", "max"),
-        )
-        .reset_index()
+    df["_type"] = df.apply(
+        lambda r: product_type(r["product_name"], r.get("category"), r["product_id"]),
+        axis=1,
+    )
+    df = df.dropna(subset=["_type"])
+    rep = (
+        df.groupby(["_type", "product_id", "product_name", "category"])["order_id"]
+        .nunique()
+        .reset_index(name="n_orders")
+        .sort_values(["_type", "n_orders"], ascending=[True, False])
+        .groupby("_type")
+        .head(1)
+        .drop(columns="n_orders")
+        .reset_index(drop=True)
+        .rename(columns={"_type": "key"})
     )
 
-    # Filtrer ut det vi ikke vil ha
-    low = agg["product_name"].str.lower()
-    for kw in EXCLUDE_KEYWORDS:
-        agg = agg[~low.str.contains(kw, na=False)]
-        low = agg["product_name"].str.lower()
+    out = cadence.drop(columns=["product_name", "category"]).merge(rep, on="key")
 
-    # Krev minst 2 separate ordre siste året for å regnes som 'fast'
-    agg = agg[agg["ganger"] >= 2]
+    out["foreslått_antall"] = out["median_days"].apply(
+        lambda m: max(1, math.ceil(list_cycle_days / max(m, 1)))
+    )
 
-    # Størrelses-kodede produkter (bleier, melk-trinn, babymat 4/6/8 mnd osv.)
-    # vokses ut av — krev at siste kjøp er innen ~4 mnd, ellers droppes de.
-    is_size_coded = agg["product_name"].str.contains(SIZE_CODED_RE, na=False)
-    fresh_cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=SIZE_CODED_MAX_AGE_DAYS)
-    drop_stale = is_size_coded & (agg["siste"] < fresh_cutoff)
-    if drop_stale.any():
-        dropped = agg.loc[drop_stale, "product_name"].tolist()
-        console.print(
-            f"[dim]Droppet {len(dropped)} størrelses-kodet(e) produkter "
-            f"(siste kjøp > {SIZE_CODED_MAX_AGE_DAYS} dager siden):[/dim]"
-        )
-        for name in dropped:
-            console.print(f"  [dim]· {name}[/dim]")
-    agg = agg[~drop_stale]
-
-    # Velg topp-produkter, men sørg for variasjon: maks 4 per kategori
-    agg = agg.sort_values(["ganger", "sum_qty"], ascending=False)
-    keep = []
-    cat_count: dict[str, int] = {}
-    for _, row in agg.iterrows():
-        cat = row["category"]
-        if cat_count.get(cat, 0) >= 4:
-            continue
-        keep.append(row)
-        cat_count[cat] = cat_count.get(cat, 0) + 1
-        if len(keep) >= top_n:
-            break
-
-    out = pd.DataFrame(keep)
-    # Foreslått antall = avrundet snitt-kvantum per ordre, minst 1
-    out["foreslått_antall"] = out["mean_qty"].round().clip(lower=1).astype(int)
-
-    # Sorter etter kategoriprioritet for visning
     def prio(cat: str) -> int:
         try:
             return CATEGORY_PRIORITY.index(cat)
@@ -148,26 +126,41 @@ def curate(lines: pd.DataFrame, top_n: int = 40) -> pd.DataFrame:
             return 999
 
     out["_prio"] = out["category"].map(prio)
-    out = out.sort_values(["_prio", "ganger"], ascending=[True, False]).drop(columns="_prio")
-    return out.reset_index(drop=True)
+    out = out.sort_values(["_prio", "n_buys"], ascending=[True, False])
+
+    keep = []
+    cat_count: dict[str, int] = {}
+    for _, row in out.iterrows():
+        cat = row["category"]
+        if cat_count.get(cat, 0) >= max_per_category:
+            continue
+        keep.append(row)
+        cat_count[cat] = cat_count.get(cat, 0) + 1
+        if len(keep) >= top_n:
+            break
+
+    return pd.DataFrame(keep).drop(columns="_prio").reset_index(drop=True)
 
 
-def show(curated: pd.DataFrame) -> None:
-    t = Table(title=f"Forslag til handleliste — {len(curated)} produkter")
+def show(curated: pd.DataFrame, cycle: int) -> None:
+    t = Table(title=f"Handleliste — {len(curated)} varetyper · syklus {cycle} d")
     t.add_column("#", justify="right")
     t.add_column("Kategori")
-    t.add_column("Produkt")
+    t.add_column("Varetype")
+    t.add_column("Produkt (eksempel)")
     t.add_column("Antall", justify="right")
-    t.add_column("Ganger 12 mnd", justify="right")
+    t.add_column("Kadens", justify="right")
     t.add_column("Sist kjøpt")
     for i, row in curated.iterrows():
+        median = int(round(row["median_days"]))
         t.add_row(
             str(i + 1),
             str(row["category"])[:22],
-            str(row["product_name"])[:55],
+            str(row["key"]).capitalize()[:22],
+            str(row["product_name"])[:45],
             str(row["foreslått_antall"]),
-            str(int(row["ganger"])),
-            str(row["siste"].date()) if pd.notna(row["siste"]) else "—",
+            f"hver {median}. d",
+            str(row["last"].date()) if pd.notna(row["last"]) else "—",
         )
     console.print(t)
 
@@ -215,14 +208,17 @@ def main() -> None:
     p.add_argument("--title", default="Ukehandel — familien", help="Listetittel")
     p.add_argument(
         "--description",
-        default="Faste varer basert på handlemønsteret siste 12 mnd",
+        default="Faste varer basert på kjøpskadens per varetype",
     )
-    p.add_argument("--top", type=int, default=40, help="Maks antall produkter")
+    p.add_argument("--cycle", type=int, default=14,
+                   help="Listesyklus i dager — qty per vare = "
+                        "ceil(syklus / median-intervall)")
+    p.add_argument("--top", type=int, default=40, help="Maks antall varetyper")
     args = p.parse_args()
 
     lines = load()
-    curated = curate(lines, top_n=args.top)
-    show(curated)
+    curated = curate(lines, list_cycle_days=args.cycle, top_n=args.top)
+    show(curated, cycle=args.cycle)
 
     if not args.create:
         console.print(
