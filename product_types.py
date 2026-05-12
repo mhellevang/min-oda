@@ -100,9 +100,12 @@ _KEYWORD_RULES: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"tabasco|sriracha"), "hot-saus"),
 
     # Sammensatte/foredlede varer som inneholder fruktnavn — må komme
-    # før de rene fruktreglene så ikke f.eks. "banan-müsli" ender som banan.
+    # før de rene fruktreglene så ikke f.eks. "banan-müsli" ender som banan
+    # eller "Farris bris mango & papaya" ender som mango.
     (re.compile(r"\bmüsli|musli\b|granola|cornflakes|fitness|fruktmusli"), "frokostblanding"),
     (re.compile(r"smoothie\b"), "smoothie"),
+    (re.compile(r"appelsinjuice|eplejuice|tranebærjuice|frokostjuice|juice|sitronjuice"), "juice"),
+    (re.compile(r"pepsi|coca-cola|solo|sprite|farris bris|hamar julebrus|julebrus"), "brus"),
 
     # Frukt og grønt
     (re.compile(r"\bagurk"), "agurk"),
@@ -176,9 +179,6 @@ _KEYWORD_RULES: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"hele bønner|kaffebønner"), "kaffe-bønner"),
     (re.compile(r"filtermalt|brente bønner|kaffe"), "kaffe"),
     (re.compile(r"earl grey|\bte\b"), "te"),
-    (re.compile(r"appelsinjuice|eplejuice|tranebærjuice|frokostjuice|juice|sitronjuice"), "juice"),
-    (re.compile(r"smoothie"), "smoothie"),
-    (re.compile(r"pepsi|coca-cola|solo|sprite|farris bris|hamar julebrus|julebrus"), "brus"),
     (re.compile(r"farris|snåsavann|naturell vann"), "vann"),
     (re.compile(r"\bøl\b|juleøl|pilsner|fatøl|radler|ipa|nastro azzurro"), "øl"),
     (re.compile(r"sjokoladedrikk|regia"), "sjokoladedrikk"),
