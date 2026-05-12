@@ -47,49 +47,85 @@ def load() -> pd.DataFrame:
     return lines
 
 
-def personal_index(lines: pd.DataFrame, since: int | None = None) -> pd.Series:
-    """Veid Carli-indeks: per produkt-ID, normaliser pris til snittpris i
-    produktets første kvartal, så ta veid snitt over alle kvartaler
-    (vekt = spend per produkt det kvartalet). Krever ≥3 obs i ≥2 kvartaler.
-    """
+MIN_PRODUCTS_PER_QUARTER = 10
+MAX_QUARTER_GAP = 4
+MIN_COMMON_PRODUCTS = 5
+
+
+def personal_index(
+    lines: pd.DataFrame,
+    since: int | None = None,
+    min_products: int = MIN_PRODUCTS_PER_QUARTER,
+    max_gap: int = MAX_QUARTER_GAP,
+    min_common: int = MIN_COMMON_PRODUCTS,
+) -> pd.Series:
+    """Kjedet veid prisindeks. For hvert kvartalspar regnes prisendring kun på
+    produkter som finnes i begge kvartaler. Kjeden brytes (og starter på nytt)
+    hvis et kvartal har < `min_products` produkter, gapet til forrige kvartal
+    er > `max_gap` kvartaler, eller overlappet er < `min_common` produkter.
+    Lengste sammenhengende segment returneres — anker (=100) er det første
+    kvartalet i det segmentet. Slik unngår vi å bygge indeks over flerårige
+    hull i datagrunnlaget."""
     df = lines.copy()
     if since:
         df = df[df["year"] >= since]
-
-    counts = df.groupby("product_id").agg(
-        n=("date", "count"), nq=("quarter", "nunique")
-    )
-    keep = counts[(counts["n"] >= 3) & (counts["nq"] >= 2)].index
-    df = df[df["product_id"].isin(keep)]
     if df.empty:
         return pd.Series(dtype=float)
 
-    first_q = df.groupby("product_id")["quarter"].min().rename("first_q")
-    df = df.merge(first_q, left_on="product_id", right_index=True)
-    base = (
-        df[df["quarter"] == df["first_q"]]
-        .groupby("product_id")["unit_price"]
-        .mean()
-        .rename("base_price")
-    )
-    df = df.merge(base, left_on="product_id", right_index=True)
-    df["rel"] = df["unit_price"] / df["base_price"]
     df["spend"] = df["unit_price"] * df["quantity"]
+    by = (
+        df.groupby(["product_id", "quarter"])
+        .agg(price=("unit_price", "mean"), spend=("spend", "sum"))
+        .reset_index()
+    )
 
-    by = df.groupby(["product_id", "quarter"]).agg(
-        rel=("rel", "mean"), weight=("spend", "sum")
-    ).reset_index()
-    by["weighted_rel"] = by["rel"] * by["weight"]
+    products_per_q = by.groupby("quarter")["product_id"].nunique()
+    valid = products_per_q[products_per_q >= min_products].index
+    by = by[by["quarter"].isin(valid)]
 
-    sums = by.groupby("quarter").agg(num=("weighted_rel", "sum"), den=("weight", "sum"))
-    idx = (sums["num"] / sums["den"]) * 100
+    quarters = sorted(by["quarter"].unique())
+    if len(quarters) < 2:
+        return pd.Series(dtype=float)
+
+    segments: list[dict] = []
+    current: dict = {}
+    last_q = None
+    last_data = None
+    for q in quarters:
+        cur_data = by[by["quarter"] == q].set_index("product_id")
+        if last_q is None:
+            current = {q: 100.0}
+            last_q, last_data = q, cur_data
+            continue
+        gap = (q.year - last_q.year) * 4 + (q.quarter - last_q.quarter)
+        common = last_data.index.intersection(cur_data.index)
+        weights = last_data.loc[common, "spend"] if len(common) else None
+        if gap > max_gap or len(common) < min_common or weights.sum() == 0:
+            if len(current) >= 2:
+                segments.append(current)
+            current = {q: 100.0}
+            last_q, last_data = q, cur_data
+            continue
+        ratios = cur_data.loc[common, "price"] / last_data.loc[common, "price"]
+        step = (ratios * weights).sum() / weights.sum()
+        current[q] = current[last_q] * step
+        last_q, last_data = q, cur_data
+    if len(current) >= 2:
+        segments.append(current)
+
+    if not segments:
+        return pd.Series(dtype=float)
+
+    best = max(segments, key=len)
+    idx = pd.Series(best).sort_index()
     idx.name = "personlig_indeks"
-    return idx.sort_index()
+    return idx
 
 
 def per_product_evolution(lines: pd.DataFrame, top_n: int) -> pd.DataFrame:
-    """For mest-kjøpte produkter: snittpris første og siste kvartal, % endring.
-    Krever ≥3 kjøp og minst 4 kvartaler mellom første og siste."""
+    """For mest-kjøpte produkter: snittpris første og siste kvartal, total endring
+    og CAGR (annualisert) så ulike tidsspenn blir sammenlignbare. Krever ≥3 kjøp
+    og minst 4 kvartaler mellom første og siste."""
     by_product = lines.groupby("product_id").agg(
         product_name=("product_name", "last"),
         spend=("line_total", "sum"),
@@ -101,20 +137,23 @@ def per_product_evolution(lines: pd.DataFrame, top_n: int) -> pd.DataFrame:
     for pid in by_product.sort_values("spend", ascending=False).index:
         sub = lines[lines["product_id"] == pid]
         first_q, last_q = sub["quarter"].min(), sub["quarter"].max()
-        span = (last_q.year - first_q.year) * 4 + (last_q.quarter - first_q.quarter)
-        if span < 4:
+        span_q = (last_q.year - first_q.year) * 4 + (last_q.quarter - first_q.quarter)
+        if span_q < 4:
             continue
         first_price = sub[sub["quarter"] == first_q]["unit_price"].mean()
         last_price = sub[sub["quarter"] == last_q]["unit_price"].mean()
+        years = span_q / 4
         rows.append(
             {
                 "product": str(by_product.loc[pid, "product_name"])[:55],
                 "n": int(by_product.loc[pid, "n"]),
                 "from_q": str(first_q),
                 "to_q": str(last_q),
+                "years": years,
                 "first": first_price,
                 "last": last_price,
                 "pct": (last_price / first_price - 1) * 100,
+                "cagr": ((last_price / first_price) ** (1 / years) - 1) * 100,
                 "spend": by_product.loc[pid, "spend"],
             }
         )
@@ -210,18 +249,22 @@ def render_evolution_table(evo: pd.DataFrame) -> None:
     t.add_column("Produkt")
     t.add_column("N", justify="right")
     t.add_column("Periode")
+    t.add_column("År", justify="right")
     t.add_column("Først", justify="right")
     t.add_column("Sist", justify="right")
-    t.add_column("Endring", justify="right")
-    for _, r in evo.sort_values("pct", ascending=False).iterrows():
-        color = "red" if r["pct"] > 20 else ("green" if r["pct"] < -5 else "white")
+    t.add_column("Total", justify="right")
+    t.add_column("Per år", justify="right")
+    for _, r in evo.sort_values("cagr", ascending=False).iterrows():
+        color = "red" if r["cagr"] > 5 else ("green" if r["cagr"] < -2 else "white")
         t.add_row(
             r["product"],
             str(r["n"]),
             f"{r['from_q']}→{r['to_q']}",
+            f"{r['years']:.1f}",
             f"{r['first']:.2f}",
             f"{r['last']:.2f}",
-            f"[{color}]{r['pct']:+.1f}%[/{color}]",
+            f"{r['pct']:+.1f}%",
+            f"[{color}]{r['cagr']:+.1f}%[/{color}]",
         )
     console.print(t)
 
@@ -264,15 +307,15 @@ def main() -> None:
         console.print("[yellow]For lite data per produkt.[/yellow]")
     else:
         render_evolution_table(evo)
-        winners = evo.nsmallest(3, "pct")
-        losers = evo.nlargest(3, "pct")
+        winners = evo.nsmallest(3, "cagr")
+        losers = evo.nlargest(3, "cagr")
         console.print(
-            f"\n[bold]Største nedganger:[/bold] "
-            + ", ".join(f"{r['product'][:30]} ({r['pct']:+.0f}%)" for _, r in winners.iterrows())
+            f"\n[bold]Største nedganger (per år):[/bold] "
+            + ", ".join(f"{r['product'][:30]} ({r['cagr']:+.1f}%/år)" for _, r in winners.iterrows())
         )
         console.print(
-            f"[bold]Største oppganger:[/bold] "
-            + ", ".join(f"{r['product'][:30]} ({r['pct']:+.0f}%)" for _, r in losers.iterrows())
+            f"[bold]Største oppganger (per år):[/bold] "
+            + ", ".join(f"{r['product'][:30]} ({r['cagr']:+.1f}%/år)" for _, r in losers.iterrows())
         )
 
     console.rule("[bold cyan]MVA-mix per år[/bold cyan]")
@@ -299,6 +342,10 @@ def main() -> None:
                 ssb_change = (ssb_window.iloc[-1] / ssb_window.iloc[0] - 1) * 100
                 personal_change = (idx.iloc[-1] / idx.iloc[0] - 1) * 100
                 diff = personal_change - ssb_change
+                console.print(
+                    f"[dim]Vindu: {idx.index[0]} → {idx.index[-1]} "
+                    f"(samme periode for begge kilder).[/dim]"
+                )
                 t = Table()
                 t.add_column("Kilde")
                 t.add_column("Endring", justify="right")
