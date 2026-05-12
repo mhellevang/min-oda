@@ -32,12 +32,12 @@ def load_orders() -> list[dict]:
         console.print("[red]Mangler data/orders.json — kjør fetch_orders.py først.[/red]")
         raise SystemExit(1)
     raw = json.loads(p.read_text())
-    # Strukturen er gruppert per måned — flatt ut.
-    if raw and isinstance(raw[0], dict) and raw[0].get("type") == "month":
+    # Strukturen er gruppert (per måned + "Gjeldende bestillinger") — flatt ut.
+    if raw and isinstance(raw[0], dict) and "orders" in raw[0]:
         flat = []
-        for month in raw:
-            for o in month.get("orders", []):
-                o["_month_label"] = month.get("name")
+        for group in raw:
+            for o in group.get("orders", []):
+                o["_month_label"] = group.get("name")
                 flat.append(o)
         return flat
     return raw

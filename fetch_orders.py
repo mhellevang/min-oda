@@ -179,13 +179,12 @@ def main() -> None:
 
     save(orders, "orders.json")
 
-    # Strukturen er gruppert per måned: [{name, gross_amount, orders: [...]}]
-    # Flatt ut til enkeltordrer.
+    # Strukturen er gruppert (per måned + "Gjeldende bestillinger") — flatt ut.
     flat: list[dict] = []
-    if orders and isinstance(orders[0], dict) and orders[0].get("type") == "month":
-        for month in orders:
-            for o in month.get("orders", []):
-                o["_month"] = month.get("name")
+    if orders and isinstance(orders[0], dict) and "orders" in orders[0]:
+        for group in orders:
+            for o in group.get("orders", []):
+                o["_month"] = group.get("name")
                 flat.append(o)
     else:
         flat = orders
