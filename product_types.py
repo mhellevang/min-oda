@@ -59,6 +59,11 @@ _KEYWORD_RULES: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bmelk|tinemelk|skummet|helmelk|lettmelk|sjokolademelk|mjølk"), "melk"),
     (re.compile(r"\bskyr\b"), "skyr"),
     (re.compile(r"\bkefir"), "kefir"),
+    # Yoghurt-undertyper: barn (90g junior) og tykk (gresk/tyrkisk 10%) er
+    # genuint forskjellige fra vanlig frokostyoghurt. Må komme før den
+    # generelle yoghurt-regelen.
+    (re.compile(r"junior yoghurt|barneyoghurt"), "yoghurt-junior"),
+    (re.compile(r"gresk yoghurt|tyrkisk yoghurt|yoghurt gresk|yoghurt tyrkisk"), "yoghurt-tykk"),
     (re.compile(r"yoghurt"), "yoghurt"),
     (re.compile(r"crème fraîche|creme fraiche"), "crème-fraîche"),
     (re.compile(r"rømme"), "rømme"),

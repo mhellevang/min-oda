@@ -73,7 +73,7 @@ def curate(
     lines: pd.DataFrame,
     list_cycle_days: int = 14,
     top_n: int = 40,
-    max_per_category: int = 4,
+    max_per_category: int = 8,
 ) -> pd.DataFrame:
     """Bygg handleliste basert på restock-kadens per varetype.
 
@@ -214,10 +214,17 @@ def main() -> None:
                    help="Listesyklus i dager — qty per vare = "
                         "ceil(syklus / median-intervall)")
     p.add_argument("--top", type=int, default=40, help="Maks antall varetyper")
+    p.add_argument("--max-per-category", type=int, default=8,
+                   help="Maks antall varetyper per Oda-kategori")
     args = p.parse_args()
 
     lines = load()
-    curated = curate(lines, list_cycle_days=args.cycle, top_n=args.top)
+    curated = curate(
+        lines,
+        list_cycle_days=args.cycle,
+        top_n=args.top,
+        max_per_category=args.max_per_category,
+    )
     show(curated, cycle=args.cycle)
 
     if not args.create:
