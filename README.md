@@ -85,6 +85,38 @@ kombinasjoner). Med `--product` får du et oppslag for ett spesifikt produkt
 — "når jeg kjøper X, hva følger med?". `--min-orders` styrer hvor sjeldne
 produkter må filtreres bort før de inngår i parene.
 
+```sh
+uv run restock.py
+uv run restock.py --horizon 7
+uv run restock.py --by-product          # drill ned til produkt-id
+uv run restock.py --min-buys 4 --max-median 60
+uv run restock.py --all
+```
+
+Restock-forslag: aggregerer kjøp per varetype (brød, melk, ost, …) og
+beregner median-intervall mellom kjøp + forventet neste-kjøp-dato.
+Viser hva som *snart* går tomt (status `forfalt`/`akkurat nå`/`snart`)
+sortert etter hvor lenge siden det skulle vært handlet. Varetyper med
+median over `--max-median` (90 dager som standard) regnes som sjeldne
+kjøp og droppes. Det samme gjelder varetyper som ikke er kjøpt på
+lenge — de regnes som forlatt. `--all` viser alle uansett. CV-kolonnen
+er variasjonskoeffisient (lave verdier = pålitelig kadens).
+
+Klassifiseringen ligger i `product_types.py` med en eksplisitt mapping
+i `data/product_types.json` for de hyppigst kjøpte produktene, og en
+keyword-fallback for resten. Med `--by-product` får du drill-down til
+konkrete produkt-id-er i stedet for varetype-aggregering.
+
+```sh
+uv run report.py
+uv run report.py --no-ssb --out min-rapport.html
+```
+
+Samler de viktigste analysene i én selvstendig HTML-fil med nøkkeltall,
+månedlig forbruk, restock-forslag, topp-produkter/-kategorier siste 12
+mnd, prisindeks (med SSB-sammenligning) og sesongprodukter. Plot bakes
+inn som base64, så filen kan deles uten støtte-filer.
+
 ## Lag handleliste på oda.com
 
 ```sh
