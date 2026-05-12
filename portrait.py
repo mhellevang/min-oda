@@ -11,18 +11,13 @@ import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
+from data_loader import load_both
+
 console = Console()
-DATA_DIR = Path(__file__).parent / "data"
 
 
 def load() -> tuple[pd.DataFrame, pd.DataFrame]:
-    orders = pd.read_csv(DATA_DIR / "orders.csv", parse_dates=["date"])
-    lines = pd.read_csv(DATA_DIR / "lines.csv")
-    # Knytt linjer til ordredato
-    orders_idx = orders.set_index("order_number")["date"]
-    lines["date"] = lines["order_id"].map(orders_idx)
-    lines["date"] = pd.to_datetime(lines["date"], errors="coerce", utc=True)
-    lines["year"] = lines["date"].dt.year
+    orders, lines = load_both()
     return orders, lines
 
 

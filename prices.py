@@ -20,8 +20,9 @@ import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
+from data_loader import load_lines, load_orders
+
 console = Console()
-DATA_DIR = Path(__file__).parent / "data"
 PLOTS_DIR = Path(__file__).parent / "plots"
 PLOTS_DIR.mkdir(exist_ok=True)
 
@@ -29,17 +30,11 @@ SSB_TABLE_URL = "https://data.ssb.no/api/v0/no/table/03013"
 
 
 def load() -> pd.DataFrame:
-    orders = pd.read_csv(DATA_DIR / "orders.csv", parse_dates=["date"])
-    lines = pd.read_csv(DATA_DIR / "lines.csv")
-    orders_idx = orders.set_index("order_number")["date"]
-    lines["date"] = pd.to_datetime(lines["order_id"].map(orders_idx), utc=True)
-    lines["unit_price"] = pd.to_numeric(lines["unit_price"], errors="coerce")
-    lines["line_total"] = pd.to_numeric(lines["line_total"], errors="coerce")
-    lines["quantity"] = pd.to_numeric(lines["quantity"], errors="coerce").fillna(1)
+    orders = load_orders()
+    lines = load_lines(orders)
     lines = lines.dropna(subset=["date", "unit_price", "product_id"])
     # Fjern pant/retur (negative beløp) og rotete null-priser
     lines = lines[lines["unit_price"] > 0]
-    lines["vat_pct"] = lines["vat_percentage"].str.rstrip("%").astype(float)
     lines["quarter"] = (
         lines["date"].dt.tz_convert("Europe/Oslo").dt.tz_localize(None).dt.to_period("Q")
     )

@@ -21,12 +21,13 @@ import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
+from data_loader import load_lines
+
 console = Console()
-DATA_DIR = Path(__file__).parent / "data"
 
 
 def load() -> tuple[pd.DataFrame, dict[int, str]]:
-    lines = pd.read_csv(DATA_DIR / "lines.csv")
+    lines = load_lines()
     lines = lines.dropna(subset=["product_id", "order_id"])
     lines["product_id"] = lines["product_id"].astype(int)
     name_map = (

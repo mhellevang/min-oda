@@ -16,8 +16,9 @@ import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
+from data_loader import load_both
+
 console = Console()
-DATA_DIR = Path(__file__).parent / "data"
 PLOTS_DIR = Path(__file__).parent / "plots"
 PLOTS_DIR.mkdir(exist_ok=True)
 
@@ -26,13 +27,7 @@ NB_MONTHS = ["", "jan", "feb", "mar", "apr", "mai", "jun",
 
 
 def load() -> tuple[pd.DataFrame, pd.DataFrame]:
-    orders = pd.read_csv(DATA_DIR / "orders.csv")
-    orders["date"] = pd.to_datetime(orders["date"], utc=True, errors="coerce")
-    lines = pd.read_csv(DATA_DIR / "lines.csv")
-    orders_idx = orders.set_index("order_number")["date"]
-    lines["date"] = pd.to_datetime(lines["order_id"].map(orders_idx), utc=True)
-    lines["month_num"] = lines["date"].dt.month
-    lines["year"] = lines["date"].dt.year
+    orders, lines = load_both()
     orders["month_num"] = orders["date"].dt.month
     orders["year"] = orders["date"].dt.year
     return orders, lines

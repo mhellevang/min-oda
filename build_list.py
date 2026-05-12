@@ -21,9 +21,9 @@ from rich.console import Console
 from rich.table import Table
 
 from fetch_orders import build_client
+from data_loader import load_lines, load_orders
 
 console = Console()
-DATA_DIR = Path(__file__).parent / "data"
 
 LIST_URL = "https://oda.com/api/v1/product-lists/"
 
@@ -73,11 +73,8 @@ SIZE_CODED_MAX_AGE_DAYS = 120  # ~4 mnd
 
 
 def load() -> pd.DataFrame:
-    orders = pd.read_csv(DATA_DIR / "orders.csv")
-    orders["date"] = pd.to_datetime(orders["date"], utc=True, errors="coerce")
-    lines = pd.read_csv(DATA_DIR / "lines.csv")
-    orders_idx = orders.set_index("order_number")["date"]
-    lines["date"] = pd.to_datetime(lines["order_id"].map(orders_idx), utc=True)
+    orders = load_orders()
+    lines = load_lines(orders)
     return lines
 
 

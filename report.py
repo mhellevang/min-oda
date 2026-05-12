@@ -24,6 +24,7 @@ import httpx
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from data_loader import load_both
 from prices import (
     fetch_ssb_food_cpi,
     per_product_evolution,
@@ -33,7 +34,6 @@ from prices import (
 )
 from restock import compute_cadence
 
-DATA_DIR = Path(__file__).parent / "data"
 PLOTS_DIR = Path(__file__).parent / "plots"
 PLOTS_DIR.mkdir(exist_ok=True)
 
@@ -42,23 +42,11 @@ PLOTS_DIR.mkdir(exist_ok=True)
 
 
 def load() -> tuple[pd.DataFrame, pd.DataFrame]:
-    orders = pd.read_csv(DATA_DIR / "orders.csv")
-    orders["date"] = pd.to_datetime(orders["date"], utc=True, errors="coerce")
-    orders["total"] = pd.to_numeric(orders["total"], errors="coerce")
-
-    lines = pd.read_csv(DATA_DIR / "lines.csv")
-    orders_idx = orders.set_index("order_number")["date"]
-    lines["date"] = pd.to_datetime(lines["order_id"].map(orders_idx), utc=True)
-    lines["unit_price"] = pd.to_numeric(lines["unit_price"], errors="coerce")
-    lines["line_total"] = pd.to_numeric(lines["line_total"], errors="coerce")
-    lines["quantity"] = pd.to_numeric(lines["quantity"], errors="coerce").fillna(1)
-    if "vat_percentage" in lines.columns:
-        lines["vat_pct"] = lines["vat_percentage"].str.rstrip("%").astype(float)
+    orders, lines = load_both()
     lines = lines.dropna(subset=["date", "product_id"])
     lines["quarter"] = (
         lines["date"].dt.tz_convert("Europe/Oslo").dt.tz_localize(None).dt.to_period("Q")
     )
-    lines["year"] = lines["date"].dt.year
     return orders, lines
 
 

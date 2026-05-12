@@ -26,10 +26,10 @@ import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
+from data_loader import load_lines, load_orders
 from product_types import product_type
 
 console = Console()
-DATA_DIR = Path(__file__).parent / "data"
 
 # Hopp over forbruksvarer som vokses ut av — samme regel som build_list.py.
 SIZE_CODED_RE = re.compile(
@@ -42,11 +42,8 @@ EXCLUDE_KEYWORDS = ["gavekort", "pant"]
 
 
 def load() -> pd.DataFrame:
-    orders = pd.read_csv(DATA_DIR / "orders.csv")
-    orders["date"] = pd.to_datetime(orders["date"], utc=True, errors="coerce")
-    lines = pd.read_csv(DATA_DIR / "lines.csv")
-    orders_idx = orders.set_index("order_number")["date"]
-    lines["date"] = pd.to_datetime(lines["order_id"].map(orders_idx), utc=True)
+    orders = load_orders()
+    lines = load_lines(orders)
     return lines.dropna(subset=["product_id", "product_name", "date"])
 
 
