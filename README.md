@@ -153,16 +153,24 @@ forhindrer falske mangler ved merkebytte.
 ## GUI
 
 ```sh
-make gui                       # eller: uv run streamlit run app.py
+make web                       # FastAPI + HTMX-app (anbefalt) på :8000
+make gui                       # eller Streamlit-app som alternativ
 ```
 
-Streamlit-app med tre faner: **Handleliste** (forhåndsvis og opprett
-liste på oda.com), **Diff mot kurv** (varetyper som mangler i
-handlekurven), og **Restock** (hva forfaller). Felles sidebar med
-slidere for syklus, top-n og max-per-kategori — samme parametere som
-CLI-ene. Tabellene er redigerbare (juster antall, sett 0 for å droppe
-varen) og har egne søkefelt fordi nettleserens Cmd+F ikke når skjulte
-rader i Streamlit-tabeller.
+To valg:
+
+**`make web`** (FastAPI + HTMX, anbefalt): polert visuell stil arvet fra
+report.html (kremhvit bakgrunn, slate-blå aksent, kortlayout), ekte
+URL-er per side (`/handleliste`, `/diff`, `/restock`), redigerbare
+antall-felt direkte i tabellen, HTMX-drevet filtrering uten page
+reload, og status-pills med farger på restock-siden.
+
+**`make gui`** (Streamlit): eldre alternativ. Litt mer "out of the box"
+men mindre kontroll over utseende — kommer til å fases ut etter hvert.
+
+Begge gjenbruker samme analyse-logikk (`build_list.curate`,
+`cart_diff.compute_diff`, `restock.compute_cadence`) — det er kun det
+visuelle laget som skiller.
 
 ## Makefile
 
@@ -170,7 +178,8 @@ rader i Streamlit-tabeller.
 make refresh   # hent nye ordrer fra Oda
 make report    # generer HTML-rapport
 make tables    # alle terminal-analyser
-make gui       # start Streamlit-app
+make web       # start FastAPI + HTMX-app
+make gui       # start Streamlit-app (alternativ)
 make all       # refresh + report
 ```
 
