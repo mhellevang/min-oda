@@ -2,9 +2,8 @@
 
 Kjør:  uv run streamlit run app.py
 
-Multi-page-app med tre sider (handleliste / diff mot kurv / restock).
-Felles sidebar med slidere som styrer handleliste-genereringen.
-Hver side har egen URL — bokmerkbar og browser-back/forward virker.
+Tre faner (handleliste / diff mot kurv / restock) over felles sidebar.
+Hver fane delegerer til en page_*-funksjon for å holde toppnivået ryddig.
 """
 
 from __future__ import annotations
@@ -334,12 +333,12 @@ def page_restock():
     )
 
 
-pages = [
-    st.Page(page_handleliste, title="Handleliste", icon="📋",
-            url_path="handleliste", default=True),
-    st.Page(page_diff, title="Diff mot kurv", icon="🛒",
-            url_path="diff"),
-    st.Page(page_restock, title="Restock", icon="🔁",
-            url_path="restock"),
-]
-st.navigation(pages).run()
+tab_list, tab_diff, tab_restock = st.tabs(
+    ["📋 Handleliste", "🛒 Diff mot kurv", "🔁 Restock"]
+)
+with tab_list:
+    page_handleliste()
+with tab_diff:
+    page_diff()
+with tab_restock:
+    page_restock()

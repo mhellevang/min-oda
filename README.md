@@ -156,18 +156,13 @@ forhindrer falske mangler ved merkebytte.
 make gui                       # eller: uv run streamlit run app.py
 ```
 
-Streamlit-app med tre sider via `st.navigation`: **Handleliste**
-(forhåndsvis og opprett liste på oda.com), **Diff mot kurv** (varetyper
-som mangler i handlekurven), og **Restock** (hva forfaller). Felles
-sidebar med slidere for syklus, top-n og max-per-kategori — samme
-parametere som CLI-ene. Tabellene er redigerbare (juster antall, sett 0
-for å droppe varen) og har egne søkefelt fordi nettleserens Cmd+F ikke
-når skjulte rader i Streamlit-tabeller.
-
-URL-paths er definert per side (`/handleliste`, `/diff`, `/restock`),
-men Streamlits lokale dev-server returnerer 404 ved direkte sub-path —
-URL-en oppdateres visuelt og bokmerker virker først bak en reverse
-proxy eller via Streamlit Community Cloud.
+Streamlit-app med tre faner: **Handleliste** (forhåndsvis og opprett
+liste på oda.com), **Diff mot kurv** (varetyper som mangler i
+handlekurven), og **Restock** (hva forfaller). Felles sidebar med
+slidere for syklus, top-n og max-per-kategori — samme parametere som
+CLI-ene. Tabellene er redigerbare (juster antall, sett 0 for å droppe
+varen) og har egne søkefelt fordi nettleserens Cmd+F ikke når skjulte
+rader i Streamlit-tabeller.
 
 ## Makefile
 
