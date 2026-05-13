@@ -1,0 +1,14 @@
+{% set rs = refresh_status() %}
+{% if rs.error %}
+<span class="refresh-warn" title="{{ rs.error }}">⚠ kunne ikke oppdatere</span>
+{% else %}
+<span class="muted">Sist oppdatert: {{ rs.age_text }}</span>
+{% endif %}
+<button class="refresh-btn"
+        type="button"
+        hx-post="/refresh"
+        hx-target="#refresh-status"
+        hx-swap="innerHTML"
+        hx-indicator="#refresh-spinner"
+        title="Hent ny data fra Oda">⟳</button>
+<span id="refresh-spinner" class="htmx-indicator muted">henter …</span>

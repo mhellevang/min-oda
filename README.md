@@ -17,14 +17,27 @@ forlater maskinen.
    uv sync
    ```
 
-## Hent data
+## Start
 
 ```sh
-make refresh
+uv run min-oda
 ```
 
-Henter rå ordrehistorikk fra oda.com, lagrer JSON i `data/` og bygger
-`data/orders.csv` + `data/lines.csv` som resten av appen leser fra.
+Starter appen på `http://localhost:8000`. Ved oppstart sjekkes alderen
+på `data/orders.json`. Hvis den er eldre enn 24 timer, hentes nye ordrer
+fra Oda og CSV-ene bygges på nytt. Du kan også oppdatere når som helst
+via knappen `⟳` øverst til høyre.
+
+Første gang du starter, eller hvis cookien er utløpt, vises en
+advarsel i navigasjonen og appen kjører videre med eksisterende data.
+
+### Hente data manuelt
+
+Hvis du vil tvinge en oppdatering fra terminalen:
+
+```sh
+uv run python fetch_orders.py
+```
 
 Hvis ingen av de antatte endepunktene treffer, finn riktig URL i DevTools:
 
@@ -32,15 +45,11 @@ Hvis ingen av de antatte endepunktene treffer, finn riktig URL i DevTools:
 2. Network-fanen, filtrer XHR/Fetch.
 3. Finn en request som returnerer JSON med ordrelisten.
 4. Høyreklikk → Copy → Copy URL.
-5. Kjør `uv run fetch_orders.py --url '<URL>'`.
+5. Kjør `uv run python fetch_orders.py --url '<URL>'`.
 
-## Web-app
+## Funksjonalitet
 
-```sh
-make web
-```
-
-Starter FastAPI + HTMX-appen på `http://localhost:8000`. To faner:
+To faner:
 
 **Handleliste** (`/handleliste`) har to moduser:
 
@@ -69,14 +78,6 @@ du ser hva som er "ekstra" sammenlignet med default.
 - Året i Oda-måneder (sommerferie-gapet)
 - Basket-analyse: hvilke varer havner ofte sammen, og en
   *"når jeg kjøper X, hva følger med?"*-søk
-
-## Makefile
-
-```sh
-make refresh   # hent nye ordrer + bygg CSV
-make web       # start web-appen
-make all       # refresh + web
-```
 
 ## Sikkerhet
 

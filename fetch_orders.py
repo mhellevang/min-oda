@@ -32,6 +32,10 @@ DATA_DIR.mkdir(exist_ok=True)
 ORDERS_ENDPOINT = "https://oda.com/api/v1/orders/"
 
 
+class MissingCredentials(RuntimeError):
+    """Raised when .env mangler ODA_COOKIE / ODA_SESSIONID."""
+
+
 def build_client() -> httpx.Client:
     load_dotenv()
 
@@ -44,11 +48,10 @@ def build_client() -> httpx.Client:
     )
 
     if not cookie_header and not sessionid:
-        console.print(
-            "[red]Mangler credentials.[/red] Kopier .env.example til .env og "
-            "fyll inn enten ODA_COOKIE (full streng) eller ODA_SESSIONID + ODA_CSRFTOKEN."
+        raise MissingCredentials(
+            "Mangler credentials. Kopier .env.example til .env og fyll inn "
+            "enten ODA_COOKIE eller ODA_SESSIONID + ODA_CSRFTOKEN."
         )
-        sys.exit(1)
 
     cookies: dict[str, str] = {}
     if sessionid:
@@ -184,6 +187,98 @@ def extract_lines(detail: dict) -> list[dict]:
     return rows
 
 
+def fetch_all(
+    client: httpx.Client,
+    base_url: str = ORDERS_ENDPOINT,
+    with_details: bool = True,
+) -> int:
+    """Henter ordre-listen og per-ordre-detaljer, lagrer som JSON.
+    Returnerer antall ordrer."""
+    orders = fetch_with_pagination(client, base_url)
+    if not orders:
+        raise RuntimeError(
+            "Fant ingen ordrer fra Oda. Sannsynligvis utløpt cookie."
+        )
+    save(orders, "orders.json")
+
+    flat: list[dict] = []
+    if orders and isinstance(orders[0], dict) and "orders" in orders[0]:
+        for group in orders:
+            for o in group.get("orders", []):
+                o["_month"] = group.get("name")
+                flat.append(o)
+    else:
+        flat = orders
+
+    if with_details:
+        details_dir = DATA_DIR / "order_details"
+        details_dir.mkdir(exist_ok=True)
+        for order in flat:
+            order_id = (
+                order.get("order_number")
+                or order.get("id")
+                or order.get("order_id")
+                or order.get("number")
+            )
+            if not order_id:
+                continue
+            out = details_dir / f"{order_id}.json"
+            if out.exists():
+                continue
+            url = order.get("url") or f"https://oda.com/api/v1/orders/{order_id}/"
+            data = try_get(client, url)
+            if data:
+                out.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+            time.sleep(0.4)
+
+    return len(flat)
+
+
+def maybe_refresh_data(force: bool = False, max_age_hours: float = 24.0) -> dict:
+    """Sjekker alderen på data/orders.json og henter nytt fra Oda om nødvendig.
+
+    Brukes av web-appens lifespan-event og /refresh-endpoint. Fanger feil
+    (mangler creds, nettverk, 401) slik at appen ikke krasjer ved oppstart.
+
+    Returnerer dict:
+        refreshed: om data faktisk ble hentet på nytt
+        data_age_hours: alder på data/orders.json etterpå (None hvis fila mangler)
+        error: feilmelding hvis refresh ikke gikk gjennom
+    """
+    orders_path = DATA_DIR / "orders.json"
+
+    def current_age() -> float | None:
+        if not orders_path.exists():
+            return None
+        return (time.time() - orders_path.stat().st_mtime) / 3600
+
+    if orders_path.exists() and not force:
+        age = current_age()
+        if age is not None and age < max_age_hours:
+            return {"refreshed": False, "data_age_hours": age, "error": None}
+
+    try:
+        client = build_client()
+    except MissingCredentials as e:
+        return {"refreshed": False, "data_age_hours": current_age(), "error": str(e)}
+
+    try:
+        fetch_all(client)
+    except Exception as e:
+        return {"refreshed": False, "data_age_hours": current_age(), "error": str(e)}
+
+    try:
+        build_csvs()
+    except Exception as e:
+        return {
+            "refreshed": True,
+            "data_age_hours": current_age(),
+            "error": f"Hentet ordrer, men CSV-bygging feilet: {e}",
+        }
+
+    return {"refreshed": True, "data_age_hours": current_age(), "error": None}
+
+
 def build_csvs() -> tuple[int, int]:
     """Bygg orders.csv og lines.csv fra rå JSON-filer i data/.
 
@@ -275,7 +370,11 @@ def main() -> None:
     p.add_argument("--no-details", action="store_true", help="Hopp over per-ordre-detaljer")
     args = p.parse_args()
 
-    client = build_client()
+    try:
+        client = build_client()
+    except MissingCredentials as e:
+        console.print(f"[red]{e}[/red]")
+        sys.exit(1)
 
     if args.order:
         url = f"https://oda.com/api/v1/orders/{args.order}/"
@@ -284,75 +383,33 @@ def main() -> None:
             save(data, f"order_{args.order}.json")
         return
 
-    used_url = args.url or ORDERS_ENDPOINT
-    orders = fetch_with_pagination(client, used_url)
-
-    if not orders:
+    try:
+        n = fetch_all(
+            client,
+            base_url=args.url or ORDERS_ENDPOINT,
+            with_details=not args.no_details,
+        )
+    except RuntimeError as e:
         console.print(
-            "\n[red]Fant ingen ordrer.[/red] Sannsynligvis feil endepunkt.\n\n"
+            f"\n[red]{e}[/red]\n\n"
             "[bold]Slik finner du riktig URL:[/bold]\n"
             "  1. Åpne Firefox → oda.com → logg inn → 'Mine ordre'\n"
             "  2. Trykk F12, gå til 'Network'-fanen, filtrer på 'XHR' eller 'Fetch'\n"
             "  3. Last siden på nytt\n"
             "  4. Se etter en request som returnerer JSON med ordrene dine\n"
             "  5. Høyreklikk → Copy → Copy URL\n"
-            "  6. Kjør:  uv run fetch_orders.py --url '<URL>'"
+            "  6. Kjør:  uv run python fetch_orders.py --url '<URL>'"
         )
         return
 
-    save(orders, "orders.json")
-
-    # Strukturen er gruppert (per måned + "Gjeldende bestillinger") — flatt ut.
-    flat: list[dict] = []
-    if orders and isinstance(orders[0], dict) and "orders" in orders[0]:
-        for group in orders:
-            for o in group.get("orders", []):
-                o["_month"] = group.get("name")
-                flat.append(o)
-    else:
-        flat = orders
-
-    console.print(
-        f"\n[bold green]Hentet {len(flat)} ordrer[/bold green] "
-        f"({len(orders)} måneder) fra {used_url}"
-    )
-    orders = flat
-
-    if args.no_details:
-        return
-
-    console.print("\nHenter detaljer per ordre …")
-    details_dir = DATA_DIR / "order_details"
-    details_dir.mkdir(exist_ok=True)
-
-    for i, order in enumerate(orders, 1):
-        order_id = (
-            order.get("order_number")
-            or order.get("id")
-            or order.get("order_id")
-            or order.get("number")
-        )
-        if not order_id:
-            continue
-        out = details_dir / f"{order_id}.json"
-        if out.exists():
-            continue
-
-        url = order.get("url") or f"https://oda.com/api/v1/orders/{order_id}/"
-        data = try_get(client, url)
-        if data:
-            out.write_text(json.dumps(data, indent=2, ensure_ascii=False))
-        if i % 5 == 0:
-            console.print(f"  {i}/{len(orders)}")
-        time.sleep(0.4)
-
+    console.print(f"\n[bold green]Hentet {n} ordrer.[/bold green]")
     console.print("\nBygger orders.csv + lines.csv …")
     n_orders, n_lines = build_csvs()
     console.print(
         f"  [green]→[/green] data/orders.csv ({n_orders} ordrer)"
         + (f", data/lines.csv ({n_lines} linjer)" if n_lines else "")
     )
-    console.print("\n[bold green]Ferdig.[/bold green] Start web-appen:  make web")
+    console.print("\n[bold green]Ferdig.[/bold green] Start web-appen:  uv run min-oda")
 
 
 if __name__ == "__main__":

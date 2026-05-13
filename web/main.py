@@ -1,23 +1,20 @@
 """FastAPI + HTMX-app for Oda-analyse.
 
-Kjør:  uv run uvicorn web.main:app --reload --port 8000
-       eller: make web
+Kjør:  uv run min-oda
 
-Én side, `/handleliste`, med to moduser:
-  - Default: sammenlign med kurven på Oda og vis kun varer som mangler
-    (siden det er det vanligste arbeidsflyten — supplere en eksisterende
-    kurv før innlevering).
-  - "Lag fersk handleliste": bygg en komplett ukehandel-liste fra bunnen
-    av, uavhengig av hva som ligger i kurven.
+To faner:
+  /handleliste — bygg handlelister eller suppler kurven din på Oda.
+  /innsikt     — mønstre i hva du faktisk handler.
 
-Tabellen oppdateres in-place via HTMX når slidere eller søk endres — ingen
-full page reload. Selve modus-toggelen utløser full page reload så URL,
-kolonner og knappetekst speiler valgt modus.
+Data hentes automatisk ved oppstart hvis orders.json er over 24 t gammel,
+og kan også oppdateres on-demand via knappen i navigasjonen (POST /refresh).
 """
 
 from __future__ import annotations
 
+import logging
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 from time import time
 from urllib.parse import urlencode
@@ -32,14 +29,40 @@ from fastapi.templating import Jinja2Templates
 from build_list import add_products, create_list, curate, load
 from cart_diff import compute_diff, fetch_cart
 from data_loader import load_both
-from fetch_orders import build_client
+from fetch_orders import build_client, maybe_refresh_data
 
 from . import innsikt
 
-app = FastAPI(title="Oda-analyse")
+log = logging.getLogger("min-oda")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Sjekker om data er ferskt nok og henter ev. nytt fra Oda før appen
+    begynner å svare på requests. Feil sluker vi — appen starter likevel
+    med eksisterende data, og UI-banneret forklarer hva som er galt."""
+    global _REFRESH_STATUS
+    _REFRESH_STATUS = maybe_refresh_data()
+    if _REFRESH_STATUS.get("refreshed"):
+        log.info("Data oppdatert ved oppstart.")
+    elif _REFRESH_STATUS.get("error"):
+        log.warning("Refresh ved oppstart feilet: %s", _REFRESH_STATUS["error"])
+    yield
+
+
+app = FastAPI(title="Min Oda", lifespan=lifespan)
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+
+def _register_template_globals() -> None:
+    """Eksponer refresh_status() til alle templates uten å måtte legge
+    det inn manuelt i hver TemplateResponse."""
+    templates.env.globals["refresh_status"] = refresh_status_ctx
+
+
+# Registrert i bunnen av modulen, etter at refresh_status_ctx er definert.
 
 _LINES: pd.DataFrame | None = None
 _ORDERS: pd.DataFrame | None = None
@@ -55,12 +78,50 @@ DEFAULT_MAX_PER_CAT = 8
 
 _BASELINE_IDS: set[int] | None = None
 
+_REFRESH_STATUS: dict = {
+    "refreshed": False,
+    "data_age_hours": None,
+    "error": None,
+}
+
 _STATUS_CLASS = {
     "forfalt": "forfalt",
     "akkurat nå": "nå",
     "snart": "snart",
     "i rute": "rute",
 }
+
+
+def _format_age(hours: float | None) -> str:
+    if hours is None:
+        return "ukjent"
+    if hours < 1:
+        mins = max(1, int(hours * 60))
+        return f"{mins} min siden"
+    if hours < 24:
+        return f"{int(hours)} t siden"
+    days = int(hours / 24)
+    if days < 30:
+        return f"{days} d siden"
+    return f"{days // 30} mnd siden"
+
+
+def refresh_status_ctx() -> dict:
+    return {
+        "age_text": _format_age(_REFRESH_STATUS.get("data_age_hours")),
+        "error": _REFRESH_STATUS.get("error"),
+    }
+
+
+def invalidate_caches() -> None:
+    """Nullstill alle in-memory caches — kalles etter en vellykket refresh."""
+    global _LINES, _ORDERS, _LINES_FULL, _CART, _BASELINE_IDS, _BASKET_CACHE
+    _LINES = None
+    _ORDERS = None
+    _LINES_FULL = None
+    _CART = None
+    _BASELINE_IDS = None
+    _BASKET_CACHE = None
 
 
 def get_lines() -> pd.DataFrame:
@@ -240,14 +301,23 @@ def legacy_restock() -> RedirectResponse:
 
 @app.get("/reload", response_class=RedirectResponse)
 def reload_data() -> RedirectResponse:
-    global _LINES, _ORDERS, _LINES_FULL, _CART, _BASELINE_IDS, _BASKET_CACHE
-    _LINES = None
-    _ORDERS = None
-    _LINES_FULL = None
-    _CART = None
-    _BASELINE_IDS = None
-    _BASKET_CACHE = None
+    """Tøm bare in-memory cachene — ikke noen ekstern fetch.
+    For full datarefresh, bruk POST /refresh."""
+    invalidate_caches()
     return RedirectResponse("/handleliste")
+
+
+@app.post("/refresh", response_class=HTMLResponse)
+def refresh(request: Request) -> HTMLResponse:
+    """Tving en frisk fetch fra Oda + invalider cache. Returnerer det nye
+    status-fragmentet til HTMX-knappen."""
+    global _REFRESH_STATUS
+    _REFRESH_STATUS = maybe_refresh_data(force=True)
+    if _REFRESH_STATUS.get("refreshed"):
+        invalidate_caches()
+    return templates.TemplateResponse(
+        request, "_refresh_status.html", refresh_status_ctx()
+    )
 
 
 @app.get("/handleliste", response_class=HTMLResponse)
@@ -403,3 +473,6 @@ def innsikt_basket_lookup(request: Request, q: str = "") -> HTMLResponse:
     return templates.TemplateResponse(
         request, "_basket_lookup.html", {"basket_lookup": basket_lookup}
     )
+
+
+_register_template_globals()
