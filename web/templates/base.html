@@ -28,6 +28,63 @@
       line-height: 1.5;
     }
     .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 24px 64px; }
+    nav.tabs {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid var(--rule);
+      margin-bottom: 24px;
+    }
+    nav.tabs a {
+      padding: 10px 16px;
+      text-decoration: none;
+      color: var(--muted);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    nav.tabs a:hover { color: var(--ink); }
+    nav.tabs a.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+    .kpi {
+      background: var(--bg);
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .kpi .label {
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .kpi .value {
+      font-size: 22px;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+    .kpi .sub {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .bar-bg {
+      background: #eee;
+      border-radius: 3px;
+      height: 8px;
+      overflow: hidden;
+      width: 120px;
+    }
+    .bar { background: var(--accent); height: 100%; }
+    img.plot { width: 100%; height: auto; display: block; }
     .mode-toggle {
       display: inline-flex;
       border: 1px solid var(--rule);
@@ -208,6 +265,10 @@
 </head>
 <body>
   <div class="wrap">
+    <nav class="tabs">
+      <a href="/handleliste" class="{% if active == 'handleliste' %}active{% endif %}">Handleliste</a>
+      <a href="/innsikt" class="{% if active == 'innsikt' %}active{% endif %}">Innsikt</a>
+    </nav>
     {% block content %}{% endblock %}
     <footer>Oda-analyse · personlig</footer>
   </div>

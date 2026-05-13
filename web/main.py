@@ -31,7 +31,10 @@ from fastapi.templating import Jinja2Templates
 
 from build_list import add_products, create_list, curate, load
 from cart_diff import compute_diff, fetch_cart
+from data_loader import load_both
 from fetch_orders import build_client
+
+from . import innsikt
 
 app = FastAPI(title="Oda-analyse")
 
@@ -39,6 +42,9 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 _LINES: pd.DataFrame | None = None
+_ORDERS: pd.DataFrame | None = None
+_LINES_FULL: pd.DataFrame | None = None  # for /innsikt — har 'date' fra orders-merge
+_BASKET_CACHE: tuple | None = None
 _CART: pd.DataFrame | None = None
 _CART_TIME = 0.0
 _CART_TTL = 120.0
@@ -70,6 +76,24 @@ def get_cart() -> pd.DataFrame:
         _CART = fetch_cart(build_client())
         _CART_TIME = time()
     return _CART
+
+
+def get_orders_and_lines() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load orders + lines (med date joined) — cached. For /innsikt."""
+    global _ORDERS, _LINES_FULL
+    if _ORDERS is None or _LINES_FULL is None:
+        _ORDERS, _LINES_FULL = load_both()
+    return _ORDERS, _LINES_FULL
+
+
+def get_basket() -> tuple:
+    """Cache de tunge basket-parene — disse er O(n²) i antall vanlige
+    produkter, så bare regn én gang per data-reload."""
+    global _BASKET_CACHE
+    if _BASKET_CACHE is None:
+        _, lines = get_orders_and_lines()
+        _BASKET_CACHE = innsikt.basket_pairs(lines)
+    return _BASKET_CACHE
 
 
 def get_baseline_ids() -> set[int]:
@@ -216,10 +240,13 @@ def legacy_restock() -> RedirectResponse:
 
 @app.get("/reload", response_class=RedirectResponse)
 def reload_data() -> RedirectResponse:
-    global _LINES, _CART, _BASELINE_IDS
+    global _LINES, _ORDERS, _LINES_FULL, _CART, _BASELINE_IDS, _BASKET_CACHE
     _LINES = None
+    _ORDERS = None
+    _LINES_FULL = None
     _CART = None
     _BASELINE_IDS = None
+    _BASKET_CACHE = None
     return RedirectResponse("/handleliste")
 
 
@@ -241,6 +268,7 @@ def handleliste(
         request,
         "handleliste.html",
         {
+            "active": "handleliste",
             "cycle": cycle,
             "top": top,
             "max_per_cat": max_per_cat,
@@ -323,4 +351,55 @@ async def handleliste_create(request: Request) -> HTMLResponse:
         f'<div class="alert ok">La til {ok}/{len(items)} varer. '
         f'<a href="https://oda.com/no/account/lists/details/{list_id}/" '
         f'target="_blank">Åpne på Oda →</a></div>'
+    )
+
+
+# ---------- /innsikt -----------------------------------------------------
+
+
+@app.get("/innsikt", response_class=HTMLResponse)
+def innsikt_page(request: Request, q: str = "") -> HTMLResponse:
+    orders, lines = get_orders_and_lines()
+    pairs, counts, name_map, n_orders = get_basket()
+    basket_lookup = (
+        innsikt.basket_for_product(pairs, name_map, counts, n_orders, q)
+        if q
+        else None
+    )
+    return templates.TemplateResponse(
+        request,
+        "innsikt.html",
+        {
+            "active": "innsikt",
+            "kpis": innsikt.kpis(orders, lines),
+            "monthly_plot": innsikt.monthly_spend_plot_b64(orders),
+            "staples": innsikt.staples(orders, lines),
+            "cuisines": innsikt.cuisine_mix(lines),
+            "baby": innsikt.baby_signal(lines),
+            "cooking": innsikt.cooking_style(lines),
+            "prices": innsikt.price_consciousness(lines),
+            "health": innsikt.health(lines),
+            "beverages": innsikt.beverages(lines),
+            "top_p": innsikt.top_products(lines),
+            "top_c": innsikt.top_categories(lines),
+            "seasonal": innsikt.seasonal_products(lines),
+            "july": innsikt.july_gap(orders),
+            "basket_lift": innsikt.top_lift_pairs(pairs, name_map),
+            "basket_support": innsikt.top_support_pairs(pairs, name_map),
+            "basket_q": q,
+            "basket_lookup": basket_lookup,
+        },
+    )
+
+
+@app.get("/innsikt/basket-lookup", response_class=HTMLResponse)
+def innsikt_basket_lookup(request: Request, q: str = "") -> HTMLResponse:
+    pairs, counts, name_map, n_orders = get_basket()
+    basket_lookup = (
+        innsikt.basket_for_product(pairs, name_map, counts, n_orders, q)
+        if q
+        else None
+    )
+    return templates.TemplateResponse(
+        request, "_basket_lookup.html", {"basket_lookup": basket_lookup}
     )

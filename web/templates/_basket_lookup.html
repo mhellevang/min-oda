@@ -1,0 +1,33 @@
+{% if basket_lookup %}
+  {% if basket_lookup.name %}
+  <p style="margin-top: 14px;">
+    <strong>{{ basket_lookup.name }}</strong>
+    — kjøpt i {{ basket_lookup.base_count }} av {{ basket_lookup.n_orders }} ordrer.
+    {% if basket_lookup.other_matches %}
+    <span class="muted">Andre treff:
+      {% for o in basket_lookup.other_matches %}{{ o }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+    {% endif %}
+  </p>
+  {% if basket_lookup.companions %}
+  <table>
+    <thead>
+      <tr><th>Følger med</th><th class="num">Sammen i</th><th class="num">Når kjøpt</th><th class="num">Lift</th></tr>
+    </thead>
+    <tbody>
+      {% for c in basket_lookup.companions %}
+      <tr>
+        <td>{{ c.name }}</td>
+        <td class="num muted">{{ c.co }}</td>
+        <td class="num">{{ "%.0f"|format(c.conf_pct) }} %</td>
+        <td class="num muted">{{ "%.1f"|format(c.lift) }}×</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Ingen sterke assosiasjoner — produktet er for sjeldent kjøpt eller for unikt.</p>
+  {% endif %}
+  {% else %}
+  <p class="muted">Ingen produkter matcher "{{ basket_lookup.query }}".</p>
+  {% endif %}
+{% endif %}

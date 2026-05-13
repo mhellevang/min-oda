@@ -1,0 +1,368 @@
+{% extends "base.html" %}
+{% block title %}Innsikt — Oda-analyse{% endblock %}
+{% block content %}
+<h1>Innsikt</h1>
+<p class="subtitle">
+  Hva sier handleturene dine om husstanden? Tallene under er hentet fra
+  {{ kpis.n_orders }} ordrer over perioden
+  {% if kpis.date_min %}{{ kpis.date_min.strftime('%d. %b %Y') }} til
+  {{ kpis.date_max.strftime('%d. %b %Y') }}{% endif %}.
+</p>
+
+{# ---------- nøkkeltall ---------- #}
+<section>
+  <h2>Nøkkeltall</h2>
+  <div class="kpis">
+    <div class="kpi">
+      <div class="label">Ordrer</div>
+      <div class="value">{{ kpis.n_orders }}</div>
+      <div class="sub">{{ "%.2f"|format(kpis.freq_per_week) }} per uke</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Totalt brukt</div>
+      <div class="value">{{ "{:,.0f}".format(kpis.total_kr).replace(",", " ") }} kr</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Snitt per ordre</div>
+      <div class="value">{{ "{:,.0f}".format(kpis.avg_kr).replace(",", " ") }} kr</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Unike produkter</div>
+      <div class="value">{{ kpis.n_unique_products }}</div>
+      <div class="sub">{{ kpis.n_lines }} linjer totalt</div>
+    </div>
+  </div>
+</section>
+
+{# ---------- månedlig forbruk ---------- #}
+{% if monthly_plot %}
+<section>
+  <h2>Månedlig forbruk</h2>
+  <p class="muted">
+    Hver søyle er én måned. Topper henger ofte sammen med høytider, og
+    bunner med sommerferie eller bortreise.
+  </p>
+  <img class="plot" src="data:image/png;base64,{{ monthly_plot }}" alt="Månedlig forbruk">
+</section>
+{% endif %}
+
+{# ---------- husstandens DNA ---------- #}
+{% if staples %}
+<section>
+  <h2>Husstandens DNA</h2>
+  <p class="muted">
+    Varer som dukker opp i mer enn 40 % av ordrene — dette er det som
+    egentlig definerer kjøkkenet ditt, uavhengig av hva en handletur
+    måtte se ut som isolert sett.
+  </p>
+  <table>
+    <thead>
+      <tr><th>Produkt</th><th class="num">Ganger</th><th></th><th class="num">Andel</th></tr>
+    </thead>
+    <tbody>
+      {% for s in staples %}
+      <tr>
+        <td>{{ s.name }}</td>
+        <td class="num">{{ s.count }} / {{ kpis.n_orders }}</td>
+        <td><div class="bar-bg"><div class="bar" style="width: {{ s.pct }}%"></div></div></td>
+        <td class="num">{{ s.pct }} %</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{# ---------- matkultur ---------- #}
+{% if cuisines %}
+<section>
+  <h2>Matkultur</h2>
+  <p class="muted">
+    Hvor i verden spiser dere? Telt på nøkkelord i produktnavnene — én
+    pasta-pakke er ikke nok til å gjøre dere italienske, men en stabil
+    andel sier noe om hvilke kjøkken som har plass i ukerytmen.
+  </p>
+  <table>
+    <thead>
+      <tr><th>Kjøkken</th><th class="num">Linjer</th><th class="num">Sum kr</th><th class="num">Andel</th></tr>
+    </thead>
+    <tbody>
+      {% for c in cuisines %}
+      <tr>
+        <td>{{ c.name }}</td>
+        <td class="num muted">{{ c.linjer }}</td>
+        <td class="num">{{ "{:,.0f}".format(c.sum_kr).replace(",", " ") }}</td>
+        <td class="num">{{ "%.1f"|format(c.pct) }} %</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{# ---------- baby/livshendelse ---------- #}
+{% if baby %}
+<section>
+  <h2>Småbarnsfasen</h2>
+  <p>
+    Første kjøp av bleier eller annet småbarnsutstyr var
+    <strong>{{ baby.first.strftime('%d. %b %Y') }}</strong>, siste var
+    <strong>{{ baby.last.strftime('%d. %b %Y') }}</strong>.
+    Totalt {{ baby.n_lines }} linjer for
+    {{ "{:,.0f}".format(baby.sum_kr).replace(",", " ") }} kr.
+  </p>
+</section>
+{% endif %}
+
+{# ---------- kokestil + prisbevissthet + helse ---------- #}
+<section>
+  <h2>Kokestil og handlevaner</h2>
+  <p class="muted">
+    Lager dere mat eller varmer dere mat? Andelen råvarer mot ferdig­retter
+    sier mer enn hvor mye dere bruker.
+  </p>
+  <div class="kpis">
+    <div class="kpi">
+      <div class="label">Råvarer</div>
+      <div class="value">{{ "%.1f"|format(cooking.raw_pct) }} %</div>
+      <div class="sub">{{ cooking.raw_linjer }} linjer · {{ "{:,.0f}".format(cooking.raw_kr).replace(",", " ") }} kr</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Ferdigmat</div>
+      <div class="value">{{ "%.1f"|format(cooking.conv_pct) }} %</div>
+      <div class="sub">{{ cooking.conv_linjer }} linjer · {{ "{:,.0f}".format(cooking.conv_kr).replace(",", " ") }} kr</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Lavpris-merker</div>
+      <div class="value">{{ "%.1f"|format(prices.cheap_pct) }} %</div>
+      <div class="sub">av total kr</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Økologisk</div>
+      <div class="value">{{ "%.1f"|format(prices.eco_pct) }} %</div>
+      <div class="sub">av alle linjer</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Helsesignaler</h2>
+  <p class="muted">
+    Brutto kategori-spend. Mest interessant er kjøtt:fisk-forholdet og
+    hvor mye som er frukt &amp; grønt mot søtt &amp; snacks.
+  </p>
+  <table>
+    <thead>
+      <tr><th>Kategori</th><th class="num">Linjer</th><th class="num">Sum kr</th><th class="num">Andel</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Frukt og grønt</td><td class="num muted">{{ health.veg.linjer }}</td><td class="num">{{ "{:,.0f}".format(health.veg.sum_kr).replace(",", " ") }}</td><td class="num">{{ "%.1f"|format(health.veg.pct) }} %</td></tr>
+      <tr><td>Kjøtt</td><td class="num muted">{{ health.meat.linjer }}</td><td class="num">{{ "{:,.0f}".format(health.meat.sum_kr).replace(",", " ") }}</td><td class="num">{{ "%.1f"|format(health.meat.pct) }} %</td></tr>
+      <tr><td>Fisk</td><td class="num muted">{{ health.fish.linjer }}</td><td class="num">{{ "{:,.0f}".format(health.fish.sum_kr).replace(",", " ") }}</td><td class="num">{{ "%.1f"|format(health.fish.pct) }} %</td></tr>
+      <tr><td>Søtt og snacks</td><td class="num muted">{{ health.sweets.linjer }}</td><td class="num">{{ "{:,.0f}".format(health.sweets.sum_kr).replace(",", " ") }}</td><td class="num">{{ "%.1f"|format(health.sweets.pct) }} %</td></tr>
+    </tbody>
+  </table>
+  {% if health.meat_fish_ratio %}
+  <p style="margin-top: 12px;">
+    Kjøtt:fisk-forhold er <strong>{{ "%.1f"|format(health.meat_fish_ratio) }} : 1</strong>
+    (i kroner). Norge ligger snittlig på rundt 3:1, så dette gir et hint
+    om hvor husstanden ligger.
+  </p>
+  {% endif %}
+</section>
+
+{# ---------- drikke ---------- #}
+{% if beverages %}
+<section>
+  <h2>Drikkeprofil</h2>
+  <p class="muted">
+    Bokser, brett og flasker telt sammen. Alkoholfri øl er trukket fra
+    øl-tellingen så de to ikke dobbelttelles.
+  </p>
+  <table>
+    <thead>
+      <tr><th>Type</th><th class="num">Linjer</th><th class="num">Enheter</th><th class="num">Sum kr</th></tr>
+    </thead>
+    <tbody>
+      {% for b in beverages %}
+      <tr>
+        <td>{{ b.name }}</td>
+        <td class="num muted">{{ b.linjer }}</td>
+        <td class="num muted">{{ b.enheter }}</td>
+        <td class="num">{{ "{:,.0f}".format(b.sum_kr).replace(",", " ") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{# ---------- topp produkter ---------- #}
+{% if top_p %}
+<section>
+  <h2>Topp produkter — siste 12 måneder</h2>
+  <table>
+    <thead>
+      <tr><th>Produkt</th><th class="num">Ganger</th><th></th><th class="num">Sum kr</th></tr>
+    </thead>
+    <tbody>
+      {% for p in top_p %}
+      <tr>
+        <td>{{ p.name }}</td>
+        <td class="num">{{ p.ganger }}</td>
+        <td><div class="bar-bg"><div class="bar" style="width: {{ p.bar_pct }}%"></div></div></td>
+        <td class="num">{{ "{:,.0f}".format(p.sum_kr).replace(",", " ") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{# ---------- topp kategorier ---------- #}
+{% if top_c %}
+<section>
+  <h2>Topp kategorier — siste 12 måneder</h2>
+  <table>
+    <thead>
+      <tr><th>Kategori</th><th class="num">Linjer</th><th></th><th class="num">Sum kr</th></tr>
+    </thead>
+    <tbody>
+      {% for c in top_c %}
+      <tr>
+        <td>{{ c.name }}</td>
+        <td class="num muted">{{ c.linjer }}</td>
+        <td><div class="bar-bg"><div class="bar" style="width: {{ c.bar_pct }}%"></div></div></td>
+        <td class="num">{{ "{:,.0f}".format(c.sum_kr).replace(",", " ") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{# ---------- sesongprodukter ---------- #}
+{% if seasonal %}
+<section>
+  <h2>Sesongprodukter</h2>
+  <p class="muted">
+    Varer som er kjøpt i bare noen få måneder av året — typisk
+    julemarsipan, grillpølser, jordbær. Kortere sesongvindu betyr ofte
+    mer tradisjon, lengre betyr mer hverdag.
+  </p>
+  <table>
+    <thead>
+      <tr><th>Produkt</th><th class="num">Ganger</th><th>Måneder</th></tr>
+    </thead>
+    <tbody>
+      {% for s in seasonal %}
+      <tr>
+        <td>{{ s.name }}</td>
+        <td class="num muted">{{ s.ganger }}</td>
+        <td>{{ s.months }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{# ---------- juli-gapet ---------- #}
+<section>
+  <h2>Året i Oda-måneder</h2>
+  <p class="muted">
+    Hvor mange ordrer per måned, summert over {{ july.n_years }} år.
+    Juli pleier å være lav fordi sommerferie bryter rytmen — bortreise,
+    butikken i hytteland eller spontankjøp på vei hjem.
+  </p>
+  <table>
+    <thead>
+      <tr><th>Måned</th><th class="num">Ordrer</th><th class="num">Sum kr</th></tr>
+    </thead>
+    <tbody>
+      {% for r in july.rows %}
+      <tr>
+        <td>{{ r.month }}</td>
+        <td class="num muted">{{ r.ordrer }}</td>
+        <td class="num">{{ "{:,.0f}".format(r.sum_kr).replace(",", " ") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{# ---------- basket ---------- #}
+{% if basket_lift or basket_support %}
+<section>
+  <h2>Hva henger sammen?</h2>
+  <p class="muted">
+    Produkter som ofte havner i samme ordre. <em>Lift</em> rangerer det
+    mest overraskende ("disse to ble kjøpt sammen N× mer enn tilfeldig"),
+    <em>støtte</em> rangerer det mest vanlige.
+  </p>
+
+  {% if basket_lift %}
+  <h3 style="font-size: 14px; color: var(--muted); margin: 16px 0 8px;">Mest overraskende par</h3>
+  <table>
+    <thead>
+      <tr><th>A</th><th>B</th><th class="num">Sammen</th><th class="num">Lift</th><th class="num">Støtte</th></tr>
+    </thead>
+    <tbody>
+      {% for p in basket_lift %}
+      <tr>
+        <td>{{ p.a }}</td>
+        <td>{{ p.b }}</td>
+        <td class="num muted">{{ p.co }}</td>
+        <td class="num">{{ "%.1f"|format(p.lift) }}×</td>
+        <td class="num muted">{{ "%.0f"|format(p.support_pct) }} %</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if basket_support %}
+  <h3 style="font-size: 14px; color: var(--muted); margin: 24px 0 8px;">Mest vanlige par</h3>
+  <table>
+    <thead>
+      <tr><th>A</th><th>B</th><th class="num">Sammen</th><th class="num">Støtte</th><th class="num">Lift</th></tr>
+    </thead>
+    <tbody>
+      {% for p in basket_support %}
+      <tr>
+        <td>{{ p.a }}</td>
+        <td>{{ p.b }}</td>
+        <td class="num muted">{{ p.co }}</td>
+        <td class="num">{{ "%.0f"|format(p.support_pct) }} %</td>
+        <td class="num muted">{{ "%.1f"|format(p.lift) }}×</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Hva følger med?</h2>
+  <p class="muted">
+    Slå opp et produkt og se hva som ofte havner i samme ordre — nyttig
+    som "hva glemte jeg?"-verktøy.
+  </p>
+  <form hx-get="/innsikt/basket-lookup"
+        hx-target="#basket-result"
+        hx-swap="innerHTML"
+        hx-trigger="keyup changed delay:300ms from:input[name='q']">
+    <div class="controls">
+      <label style="grid-column: span 4;">Produkt
+        <input type="text" name="q" value="{{ basket_q or '' }}"
+               placeholder="f.eks. kokosmelk, brød, banan">
+      </label>
+    </div>
+  </form>
+  <div id="basket-result">
+    {% include "_basket_lookup.html" %}
+  </div>
+</section>
+{% endif %}
+
+{% endblock %}
