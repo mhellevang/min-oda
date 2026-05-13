@@ -1,6 +1,13 @@
 # Oda-analyse
 
-Personlig analyse av handlehistorikk fra oda.com.
+Personlig assistent for oda.com-handelen din. Bygger på din egen
+handlehistorikk — alt kjører lokalt, ingenting forlater maskinen.
+
+- **Handleliste**: bygg en gjenbrukbar ukehandel-mal eller suppler
+  kurven din med varer du pleier å ha med, basert på faktisk
+  kjøpsmønster og kadens per varetype. Skriver listen rett til Oda.
+- **Innsikt**: hva sier handleturene om husstanden? Matkultur,
+  helsesignaler, drikkeprofil, sesongprodukter, basket-analyse og mer.
 
 > Personlig vibe-koding. Bruker et udokumentert Oda-endepunkt med din egen
 > session-cookie — du sender ingenting til en tredjepart, men det kan slutte
