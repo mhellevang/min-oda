@@ -3,8 +3,14 @@
 {% block content %}
 <h1>Handleliste</h1>
 <p class="subtitle">
-  Forslag basert på dine faste varer. Endre antallet for hver vare i tabellen
+  {% if add_to_cart %}
+  Viser kun varer som mangler i kurven din på Oda akkurat nå
+  ({{ cart_total }} varer i kurv). Endre antall i tabellen og opprett
+  en restliste du kan legge til kurven.
+  {% else %}
+  Forslag basert på dine faste varer. Endre antall i tabellen
   (sett 0 for å droppe), så opprett listen på Oda.
+  {% endif %}
 </p>
 
 <form id="main-form"
@@ -20,8 +26,7 @@
                hx-get="/handleliste/table"
                hx-trigger="input changed delay:300ms"
                hx-include="closest form"
-               hx-target="#table-wrap"
-               hx-swap="innerHTML">
+               hx-target="#table-wrap" hx-swap="innerHTML">
       </label>
       <label>Maks varetyper
         <input type="number" name="top" value="{{ top }}"
@@ -29,8 +34,7 @@
                hx-get="/handleliste/table"
                hx-trigger="input changed delay:300ms"
                hx-include="closest form"
-               hx-target="#table-wrap"
-               hx-swap="innerHTML">
+               hx-target="#table-wrap" hx-swap="innerHTML">
       </label>
       <label>Maks per kategori
         <input type="number" name="max_per_cat" value="{{ max_per_cat }}"
@@ -38,8 +42,7 @@
                hx-get="/handleliste/table"
                hx-trigger="input changed delay:300ms"
                hx-include="closest form"
-               hx-target="#table-wrap"
-               hx-swap="innerHTML">
+               hx-target="#table-wrap" hx-swap="innerHTML">
       </label>
       <label>Søk
         <input type="text" name="search" value="{{ search }}"
@@ -47,10 +50,42 @@
                hx-get="/handleliste/table"
                hx-trigger="keyup changed delay:300ms"
                hx-include="closest form"
-               hx-target="#table-wrap"
-               hx-swap="innerHTML">
+               hx-target="#table-wrap" hx-swap="innerHTML">
       </label>
     </div>
+
+    {# Modus-toggle: triggrer full page reload slik at URL, kolonner,
+       hjelpetekst og knappetekst speiler valgt modus. #}
+    <label class="checkbox-row">
+      <input type="checkbox" name="add_to_cart" value="true"
+             {% if add_to_cart %}checked{% endif %}
+             hx-get="/handleliste"
+             hx-trigger="change"
+             hx-include="closest form"
+             hx-target="body" hx-swap="outerHTML"
+             hx-push-url="true">
+      <span>
+        <strong>Legg til kurv</strong>
+        <span class="muted">— sammenlign med kurven på oda.com og vis kun det
+        som mangler, så du kan supplere det du allerede har lagt inn.</span>
+      </span>
+    </label>
+
+    {% if add_to_cart %}
+    <label class="checkbox-row" style="padding-left: 26px;">
+      <input type="checkbox" name="top_up" value="true"
+             {% if top_up %}checked{% endif %}
+             hx-get="/handleliste"
+             hx-trigger="change"
+             hx-include="closest form"
+             hx-target="body" hx-swap="outerHTML"
+             hx-push-url="true">
+      <span>
+        Ta også med varer som ligger i kurven, men i for lavt antall
+        <span class="muted">(fyll opp til foreslått mengde)</span>
+      </span>
+    </label>
+    {% endif %}
   </section>
 
   <section>
@@ -59,9 +94,14 @@
     </div>
 
     <div class="create-row">
-      <input type="text" name="title" value="Ukehandel — familien" required
+      <input type="text" name="title"
+             value="{% if add_to_cart %}Resterende — ukehandel{% else %}Ukehandel — familien{% endif %}"
+             required
              aria-label="Listetittel">
-      <button type="submit" class="primary">📤 Opprett liste på Oda</button>
+      <button type="submit" class="primary">
+        {% if add_to_cart %}📤 Opprett restliste på Oda
+        {% else %}📤 Opprett liste på Oda{% endif %}
+      </button>
     </div>
     <div id="result"></div>
   </section>

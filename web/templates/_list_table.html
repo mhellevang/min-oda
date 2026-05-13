@@ -5,9 +5,19 @@
       <th>Kategori</th>
       <th>Varetype</th>
       <th>Produkt</th>
+      {% if add_to_cart %}
+      <th class="num">Forslag</th>
+      <th class="num">I kurv</th>
+      <th class="num">Mangler</th>
+      {% else %}
       <th class="num">Antall</th>
+      {% endif %}
+      <th>Status</th>
+      <th class="num">Forfaller</th>
       <th class="num">Kadens</th>
+      {% if not add_to_cart %}
       <th>Sist kjøpt</th>
+      {% endif %}
     </tr>
   </thead>
   <tbody>
@@ -16,12 +26,20 @@
       <td class="muted">{{ r.category }}</td>
       <td>{{ r.key }}</td>
       <td>{{ r.product_name }}</td>
+      {% if add_to_cart %}
+      <td class="num muted">{{ r.forslag }}</td>
+      <td class="num muted">{{ r.i_kurv }}</td>
+      {% endif %}
       <td class="num">
         <input type="number" class="qty" name="qty_{{ r.product_id }}"
                value="{{ r.qty }}" min="0" step="1">
       </td>
+      <td><span class="status status-{{ r.status_class }}">{{ r.status }}</span></td>
+      <td class="num muted nowrap">{{ r.due_text }}</td>
       <td class="num muted nowrap">hver {{ r.median }}. d</td>
+      {% if not add_to_cart %}
       <td class="muted nowrap">{{ r.last }}</td>
+      {% endif %}
     </tr>
     {% endfor %}
   </tbody>
@@ -30,5 +48,11 @@
   {{ rows | length }} varetyper · sett antall til 0 for å droppe en vare.
 </p>
 {% else %}
-<p class="muted">Ingen treff.</p>
+<p class="muted">
+  {% if add_to_cart %}
+  Ingenting mangler — kurven dekker hele listen. (Eller ingen treff på søket.)
+  {% else %}
+  Ingen treff.
+  {% endif %}
+</p>
 {% endif %}

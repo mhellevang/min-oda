@@ -28,26 +28,6 @@
       line-height: 1.5;
     }
     .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 24px 64px; }
-    nav.tabs {
-      display: flex;
-      gap: 4px;
-      border-bottom: 1px solid var(--rule);
-      margin-bottom: 24px;
-    }
-    nav.tabs a {
-      padding: 10px 16px;
-      text-decoration: none;
-      color: var(--muted);
-      border-bottom: 2px solid transparent;
-      margin-bottom: -1px;
-      font-size: 14px;
-      font-weight: 500;
-    }
-    nav.tabs a:hover { color: var(--ink); }
-    nav.tabs a.active {
-      color: var(--accent);
-      border-bottom-color: var(--accent);
-    }
     h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.01em; }
     h2 { font-size: 18px; margin: 0 0 14px; letter-spacing: -0.005em; }
     .subtitle { color: var(--muted); margin: 0 0 24px; font-size: 14px; }
@@ -195,11 +175,6 @@
 </head>
 <body>
   <div class="wrap">
-    <nav class="tabs">
-      <a href="/handleliste" class="{% if active == 'handleliste' %}active{% endif %}">📋 Handleliste</a>
-      <a href="/diff" class="{% if active == 'diff' %}active{% endif %}">🛒 Diff mot kurv</a>
-      <a href="/restock" class="{% if active == 'restock' %}active{% endif %}">🔁 Restock</a>
-    </nav>
     {% block content %}{% endblock %}
     <footer>Oda-analyse · personlig</footer>
   </div>

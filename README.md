@@ -160,10 +160,12 @@ make gui                       # eller Streamlit-app som alternativ
 To valg:
 
 **`make web`** (FastAPI + HTMX, anbefalt): polert visuell stil arvet fra
-report.html (kremhvit bakgrunn, slate-blå aksent, kortlayout), ekte
-URL-er per side (`/handleliste`, `/diff`, `/restock`), redigerbare
-antall-felt direkte i tabellen, HTMX-drevet filtrering uten page
-reload, og status-pills med farger på restock-siden.
+report.html (kremhvit bakgrunn, slate-blå aksent, kortlayout). Én
+side, `/handleliste`, med to moduser: default bygger fersk ukehandel,
+toggelen *Legg til kurv* sammenligner med kurven på oda.com og viser
+kun det som mangler. Tabellen har status-pills (forfalt/snart/i rute)
+og "forfaller om X d" per rad, redigerbare antall-felt, og HTMX-drevet
+filtrering uten page reload.
 
 **`make gui`** (Streamlit): eldre alternativ. Litt mer "out of the box"
 men mindre kontroll over utseende — kommer til å fases ut etter hvert.
