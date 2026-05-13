@@ -4,8 +4,11 @@ Kjør:  uv run uvicorn web.main:app --reload --port 8000
        eller: make web
 
 Én side, `/handleliste`, med to moduser:
-  - Default: bygg fersk ukehandel basert på faste varer.
-  - "Legg til kurv": sammenlign med kurven på Oda og vis kun det som mangler.
+  - Default: sammenlign med kurven på Oda og vis kun varer som mangler
+    (siden det er det vanligste arbeidsflyten — supplere en eksisterende
+    kurv før innlevering).
+  - "Lag fersk handleliste": bygg en komplett ukehandel-liste fra bunnen
+    av, uavhengig av hva som ligger i kurven.
 
 Tabellen oppdateres in-place via HTMX når slidere eller søk endres — ingen
 full page reload. Selve modus-toggelen utløser full page reload så URL,
@@ -76,7 +79,7 @@ def _build_rows(
     top: int,
     max_per_cat: int,
     search: str,
-    add_to_cart: bool,
+    new_list: bool,
     top_up: bool,
 ) -> tuple[list[dict], int]:
     ideal = curate(
@@ -86,7 +89,7 @@ def _build_rows(
         return [], 0
 
     cart_total = 0
-    if add_to_cart:
+    if not new_list:
         cart = get_cart()
         cart_total = int(cart["quantity"].sum()) if not cart.empty else 0
         ideal = compute_diff(ideal, cart, top_up=top_up)
@@ -103,14 +106,14 @@ def _build_rows(
     rows: list[dict] = []
     for _, r in ideal.iterrows():
         forslag = int(r["foreslått_antall"])
-        if add_to_cart:
-            i_kurv = int(r["i_kurv"])
-            mangler = int(r["mangler"])
-            default_qty = mangler
-        else:
+        if new_list:
             i_kurv = None
             mangler = None
             default_qty = forslag
+        else:
+            i_kurv = int(r["i_kurv"])
+            mangler = int(r["mangler"])
+            default_qty = mangler
 
         rows.append(
             {
@@ -142,7 +145,7 @@ def root() -> RedirectResponse:
 # Eldre URL-er fra forrige multi-tab-design — bevares som redirects.
 @app.get("/diff", response_class=RedirectResponse)
 def legacy_diff() -> RedirectResponse:
-    return RedirectResponse("/handleliste?add_to_cart=true")
+    return RedirectResponse("/handleliste")
 
 
 @app.get("/restock", response_class=RedirectResponse)
@@ -165,11 +168,11 @@ def handleliste(
     top: int = 40,
     max_per_cat: int = 8,
     search: str = "",
-    add_to_cart: bool = False,
+    new_list: bool = False,
     top_up: bool = False,
 ) -> HTMLResponse:
     rows, cart_total = _build_rows(
-        get_lines(), cycle, top, max_per_cat, search, add_to_cart, top_up
+        get_lines(), cycle, top, max_per_cat, search, new_list, top_up
     )
     return templates.TemplateResponse(
         request,
@@ -179,7 +182,7 @@ def handleliste(
             "top": top,
             "max_per_cat": max_per_cat,
             "search": search,
-            "add_to_cart": add_to_cart,
+            "new_list": new_list,
             "top_up": top_up,
             "rows": rows,
             "cart_total": cart_total,
@@ -194,25 +197,25 @@ def handleliste_table(
     top: int = 40,
     max_per_cat: int = 8,
     search: str = "",
-    add_to_cart: bool = False,
+    new_list: bool = False,
     top_up: bool = False,
 ) -> HTMLResponse:
     rows, _ = _build_rows(
-        get_lines(), cycle, top, max_per_cat, search, add_to_cart, top_up
+        get_lines(), cycle, top, max_per_cat, search, new_list, top_up
     )
     return templates.TemplateResponse(
         request, "_list_table.html",
-        {"rows": rows, "add_to_cart": add_to_cart},
+        {"rows": rows, "new_list": new_list},
     )
 
 
 @app.post("/handleliste/create", response_class=HTMLResponse)
 async def handleliste_create(request: Request) -> HTMLResponse:
     form = await request.form()
-    add_to_cart = form.get("add_to_cart") == "true"
+    new_list = form.get("new_list") == "true"
     cycle = int(form.get("cycle") or 14)
     default_title = (
-        "Resterende — ukehandel" if add_to_cart else "Ukehandel — familien"
+        "Ukehandel — familien" if new_list else "Resterende — ukehandel"
     )
     title = form.get("title") or default_title
 
@@ -239,9 +242,9 @@ async def handleliste_create(request: Request) -> HTMLResponse:
 
     client = build_client()
     desc = (
-        "Diff mellom faste varer og handlekurv"
-        if add_to_cart
-        else f"Faste varer · {cycle} d syklus"
+        f"Faste varer · {cycle} d syklus"
+        if new_list
+        else "Diff mellom faste varer og handlekurv"
     )
     result = create_list(client, title, desc)
     if not result:

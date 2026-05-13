@@ -5,17 +5,17 @@
       <th>Kategori</th>
       <th>Varetype</th>
       <th>Produkt</th>
-      {% if add_to_cart %}
+      {% if new_list %}
+      <th class="num">Antall</th>
+      {% else %}
       <th class="num">Forslag</th>
       <th class="num">I kurv</th>
       <th class="num">Mangler</th>
-      {% else %}
-      <th class="num">Antall</th>
       {% endif %}
       <th>Status</th>
       <th class="num">Forfaller</th>
       <th class="num">Kadens</th>
-      {% if not add_to_cart %}
+      {% if new_list %}
       <th>Sist kjøpt</th>
       {% endif %}
     </tr>
@@ -26,7 +26,7 @@
       <td class="muted">{{ r.category }}</td>
       <td>{{ r.key }}</td>
       <td>{{ r.product_name }}</td>
-      {% if add_to_cart %}
+      {% if not new_list %}
       <td class="num muted">{{ r.forslag }}</td>
       <td class="num muted">{{ r.i_kurv }}</td>
       {% endif %}
@@ -37,7 +37,7 @@
       <td><span class="status status-{{ r.status_class }}">{{ r.status }}</span></td>
       <td class="num muted nowrap">{{ r.due_text }}</td>
       <td class="num muted nowrap">hver {{ r.median }}. d</td>
-      {% if not add_to_cart %}
+      {% if new_list %}
       <td class="muted nowrap">{{ r.last }}</td>
       {% endif %}
     </tr>
@@ -49,10 +49,10 @@
 </p>
 {% else %}
 <p class="muted">
-  {% if add_to_cart %}
-  Ingenting mangler — kurven dekker hele listen. (Eller ingen treff på søket.)
-  {% else %}
+  {% if new_list %}
   Ingen treff.
+  {% else %}
+  Ingenting mangler — kurven dekker hele listen. (Eller ingen treff på søket.)
   {% endif %}
 </p>
 {% endif %}

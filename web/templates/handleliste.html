@@ -3,13 +3,13 @@
 {% block content %}
 <h1>Handleliste</h1>
 <p class="subtitle">
-  {% if add_to_cart %}
-  Viser kun varer som mangler i kurven din på Oda akkurat nå
-  ({{ cart_total }} varer i kurv). Endre antall i tabellen og opprett
-  en restliste du kan legge til kurven.
+  {% if new_list %}
+  Bygg en komplett ukehandel basert på faste varer. Endre antall
+  (sett 0 for å droppe), gi listen et navn og opprett den på Oda.
   {% else %}
-  Forslag basert på dine faste varer. Endre antall i tabellen
-  (sett 0 for å droppe), så opprett listen på Oda.
+  Sammenligner faste varer med kurven din på Oda akkurat nå
+  ({{ cart_total }} varer i kurv) og viser kun det som mangler.
+  Endre antall i tabellen og opprett en liste du kan legge til kurven.
   {% endif %}
 </p>
 
@@ -57,21 +57,20 @@
     {# Modus-toggle: triggrer full page reload slik at URL, kolonner,
        hjelpetekst og knappetekst speiler valgt modus. #}
     <label class="checkbox-row">
-      <input type="checkbox" name="add_to_cart" value="true"
-             {% if add_to_cart %}checked{% endif %}
+      <input type="checkbox" name="new_list" value="true"
+             {% if new_list %}checked{% endif %}
              hx-get="/handleliste"
              hx-trigger="change"
              hx-include="closest form"
              hx-target="body" hx-swap="outerHTML"
              hx-push-url="true">
       <span>
-        <strong>Legg til kurv</strong>
-        <span class="muted">— sammenlign med kurven på oda.com og vis kun det
-        som mangler, så du kan supplere det du allerede har lagt inn.</span>
+        <strong>Lag fersk handleliste i stedet</strong>
+        <span class="muted">— ignorer kurven og bygg en komplett ukehandel-liste fra bunnen av.</span>
       </span>
     </label>
 
-    {% if add_to_cart %}
+    {% if not new_list %}
     <label class="checkbox-row" style="padding-left: 26px;">
       <input type="checkbox" name="top_up" value="true"
              {% if top_up %}checked{% endif %}
@@ -94,14 +93,15 @@
     </div>
 
     <div class="create-row">
+      {% if new_list %}
       <input type="text" name="title"
-             value="{% if add_to_cart %}Resterende — ukehandel{% else %}Ukehandel — familien{% endif %}"
+             value="Ukehandel — familien"
              required
              aria-label="Listetittel">
-      <button type="submit" class="primary">
-        {% if add_to_cart %}📤 Opprett restliste på Oda
-        {% else %}📤 Opprett liste på Oda{% endif %}
-      </button>
+      <button type="submit" class="primary">📋 Opprett handleliste på Oda</button>
+      {% else %}
+      <button type="submit" class="primary">➕ Legg manglene i ny liste på Oda</button>
+      {% endif %}
     </div>
     <div id="result"></div>
   </section>
