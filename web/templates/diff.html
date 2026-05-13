@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Diff mot kurv — Oda-analyse{% endblock %}
+{% block content %}
+<h1>Diff mot handlekurv</h1>
+<p class="subtitle">
+  Varetyper fra handlelisten som ikke er dekket av kurven din.
+  {{ cart_total }} varer i kurven nå.
+</p>
+
+<form id="main-form"
+      hx-post="/diff/create"
+      hx-target="#result"
+      hx-swap="innerHTML">
+
+  <section>
+    <div class="controls">
+      <label>Syklus (dager)
+        <input type="number" name="cycle" value="{{ cycle }}"
+               min="7" max="28" step="1"
+               hx-get="/diff/table"
+               hx-trigger="input changed delay:300ms"
+               hx-include="closest form"
+               hx-target="#table-wrap" hx-swap="innerHTML">
+      </label>
+      <label>Maks varetyper
+        <input type="number" name="top" value="{{ top }}"
+               min="20" max="120" step="5"
+               hx-get="/diff/table"
+               hx-trigger="input changed delay:300ms"
+               hx-include="closest form"
+               hx-target="#table-wrap" hx-swap="innerHTML">
+      </label>
+      <label>Maks per kategori
+        <input type="number" name="max_per_cat" value="{{ max_per_cat }}"
+               min="4" max="20" step="1"
+               hx-get="/diff/table"
+               hx-trigger="input changed delay:300ms"
+               hx-include="closest form"
+               hx-target="#table-wrap" hx-swap="innerHTML">
+      </label>
+      <label>Søk
+        <input type="text" name="search" value="{{ search }}"
+               placeholder="varetype, produkt, kategori"
+               hx-get="/diff/table"
+               hx-trigger="keyup changed delay:300ms"
+               hx-include="closest form"
+               hx-target="#table-wrap" hx-swap="innerHTML">
+      </label>
+    </div>
+    <label class="checkbox-row">
+      <input type="checkbox" name="top_up" value="true"
+             {% if top_up %}checked{% endif %}
+             hx-get="/diff/table"
+             hx-trigger="change"
+             hx-include="closest form"
+             hx-target="#table-wrap" hx-swap="innerHTML">
+      Inkluder også varer som er i kurv, men i for lavt antall
+    </label>
+  </section>
+
+  <section>
+    <div id="table-wrap">
+      {% include "_diff_table.html" %}
+    </div>
+
+    <div class="create-row">
+      <input type="text" name="title" value="Resterende — ukehandel" required
+             aria-label="Listetittel">
+      <button type="submit" class="primary">📤 Opprett mangelliste på Oda</button>
+    </div>
+    <div id="result"></div>
+  </section>
+</form>
+{% endblock %}

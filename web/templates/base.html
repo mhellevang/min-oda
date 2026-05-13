@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}Oda-analyse{% endblock %}</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <style>
+    :root {
+      --bg: #fafaf8;
+      --card: #fff;
+      --ink: #1a1a1a;
+      --muted: #666;
+      --rule: #e5e3df;
+      --accent: #2a6f97;
+      --accent-soft: #e8f0f6;
+      --warn: #d62828;
+      --warn-soft: #fde2e2;
+      --ok: #2a9d3f;
+      --ok-soft: #e0f3e3;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.5;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 24px 64px; }
+    nav.tabs {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid var(--rule);
+      margin-bottom: 24px;
+    }
+    nav.tabs a {
+      padding: 10px 16px;
+      text-decoration: none;
+      color: var(--muted);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    nav.tabs a:hover { color: var(--ink); }
+    nav.tabs a.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.01em; }
+    h2 { font-size: 18px; margin: 0 0 14px; letter-spacing: -0.005em; }
+    .subtitle { color: var(--muted); margin: 0 0 24px; font-size: 14px; }
+    section {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      padding: 20px 22px;
+      margin-bottom: 20px;
+    }
+    .muted { color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td {
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--rule);
+      vertical-align: top;
+    }
+    th {
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    td.nowrap, th.nowrap { white-space: nowrap; }
+    .status {
+      font-size: 12px;
+      padding: 2px 10px;
+      border-radius: 999px;
+      display: inline-block;
+      white-space: nowrap;
+      font-weight: 500;
+    }
+    .status-forfalt { background: var(--warn-soft); color: #b71c1c; }
+    .status-nå { background: #fff4d4; color: #8a6d00; }
+    .status-snart { background: #d4ecf7; color: #0a557a; }
+    .status-rute { background: var(--ok-soft); color: #186a26; }
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--ink);
+      margin-top: 10px;
+      cursor: pointer;
+      text-transform: none;
+      letter-spacing: normal;
+      font-weight: normal;
+    }
+    .checkbox-row input[type="checkbox"] {
+      width: 16px; height: 16px;
+      accent-color: var(--accent);
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .controls label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-weight: 500;
+    }
+    .controls input {
+      font-size: 14px;
+      padding: 8px 10px;
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--ink);
+      font-family: inherit;
+    }
+    .controls input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    @media (max-width: 720px) {
+      .controls { grid-template-columns: 1fr 1fr; }
+    }
+    input[type="number"].qty {
+      width: 70px;
+      padding: 4px 8px;
+      border: 1px solid var(--rule);
+      border-radius: 4px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-family: inherit;
+      font-size: 14px;
+    }
+    input[type="number"].qty:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .create-row {
+      display: flex;
+      gap: 12px;
+      align-items: stretch;
+      margin-top: 20px;
+    }
+    .create-row input[type="text"] {
+      flex: 1;
+      padding: 10px 12px;
+      font-size: 14px;
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      font-family: inherit;
+    }
+    button.primary {
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 500;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    button.primary:hover { background: #235a7d; }
+    .alert {
+      margin-top: 16px;
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    .alert.ok { background: var(--ok-soft); color: #186a26; }
+    .alert.warn { background: #fff4d4; color: #8a6d00; }
+    .alert.error { background: var(--warn-soft); color: #b71c1c; }
+    .alert a { color: inherit; font-weight: 600; }
+    footer { color: var(--muted); font-size: 12px; margin-top: 32px; text-align: center; }
+    .htmx-indicator { display: none; }
+    .htmx-request .htmx-indicator { display: inline; }
+    .htmx-request.htmx-indicator { display: inline; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav class="tabs">
+      <a href="/handleliste" class="{% if active == 'handleliste' %}active{% endif %}">📋 Handleliste</a>
+      <a href="/diff" class="{% if active == 'diff' %}active{% endif %}">🛒 Diff mot kurv</a>
+      <a href="/restock" class="{% if active == 'restock' %}active{% endif %}">🔁 Restock</a>
+    </nav>
+    {% block content %}{% endblock %}
+    <footer>Oda-analyse · personlig</footer>
+  </div>
+</body>
+</html>

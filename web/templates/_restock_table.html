@@ -1,0 +1,36 @@
+{% if rows %}
+<table>
+  <thead>
+    <tr>
+      <th>Varetype</th>
+      <th>Eksempel-produkt</th>
+      <th>Kategori</th>
+      <th class="num">Kjøp</th>
+      <th>Sist</th>
+      <th class="num">Kadens</th>
+      <th class="num">Forfaller</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.key }}</td>
+      <td class="muted">{{ r.product_name }}</td>
+      <td class="muted">{{ r.category }}</td>
+      <td class="num muted">{{ r.n_buys }}</td>
+      <td class="muted nowrap">{{ r.last }}</td>
+      <td class="num muted nowrap">hver {{ r.median }}. d</td>
+      <td class="num muted nowrap">{{ r.due_text }}</td>
+      <td><span class="status status-{{ r.status_class }}">{{ r.status }}</span></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="muted" style="font-size: 12px; margin-top: 10px;">
+  {{ summary.forfalt }} forfalt · {{ summary["nå"] }} akkurat nå ·
+  {{ summary.snart }} snart · {{ summary.total }} faste varetyper analysert.
+</p>
+{% else %}
+<p class="muted">Ingenting innen valgt horisont. (Eller ingen treff på søket.)</p>
+{% endif %}
