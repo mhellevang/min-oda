@@ -4,12 +4,12 @@
 <h1>Handleliste</h1>
 <p class="subtitle">
   {% if new_list %}
-  Bygg en komplett ukehandel basert på faste varer. Endre antall
-  (sett 0 for å droppe), gi listen et navn og opprett den på Oda.
+  Her er en handleliste basert på det du pleier å kjøpe. Juster antallet
+  (sett 0 for å hoppe over en vare), gi listen et navn og lag den på Oda.
   {% else %}
-  Sammenligner faste varer med kurven din på Oda akkurat nå
-  ({{ cart_total }} varer i kurv) og viser kun det som mangler.
-  Endre antall i tabellen og opprett en liste du kan legge til kurven.
+  Du pleier å handle disse varene, men de ligger ikke i kurven din
+  ({{ cart_total }} varer der nå). Juster antallet og lag en liste
+  du kan legge rett til kurven på Oda.
   {% endif %}
 </p>
 
@@ -20,7 +20,7 @@
 
   <section>
     <div class="controls">
-      <label>Syklus (dager)
+      <label>Dager listen skal vare
         <input type="number" name="cycle" value="{{ cycle }}"
                min="7" max="28" step="1"
                hx-get="/handleliste/table"
@@ -28,7 +28,7 @@
                hx-include="closest form"
                hx-target="#table-wrap" hx-swap="innerHTML">
       </label>
-      <label>Maks varetyper
+      <label>Maks antall varer
         <input type="number" name="top" value="{{ top }}"
                min="20" max="120" step="5"
                hx-get="/handleliste/table"
@@ -46,7 +46,7 @@
       </label>
       <label>Søk
         <input type="text" name="search" value="{{ search }}"
-               placeholder="varetype, produkt, kategori"
+               placeholder="f.eks. melk, brød, agurk"
                hx-get="/handleliste/table"
                hx-trigger="keyup changed delay:300ms"
                hx-include="closest form"
@@ -65,8 +65,8 @@
              hx-target="body" hx-swap="outerHTML"
              hx-push-url="true">
       <span>
-        <strong>Lag fersk handleliste i stedet</strong>
-        <span class="muted">— ignorer kurven og bygg en komplett ukehandel-liste fra bunnen av.</span>
+        <strong>Vis hele handlelisten</strong>
+        <span class="muted">— ikke bare det som mangler i kurven.</span>
       </span>
     </label>
 
@@ -80,8 +80,8 @@
              hx-target="body" hx-swap="outerHTML"
              hx-push-url="true">
       <span>
-        Ta også med varer som ligger i kurven, men i for lavt antall
-        <span class="muted">(fyll opp til foreslått mengde)</span>
+        Ta også med varer du har for få av i kurven
+        <span class="muted">(fyll opp resten)</span>
       </span>
     </label>
     {% endif %}
@@ -97,10 +97,10 @@
       <input type="text" name="title"
              value="Ukehandel — familien"
              required
-             aria-label="Listetittel">
-      <button type="submit" class="primary">📋 Opprett handleliste på Oda</button>
+             aria-label="Listenavn">
+      <button type="submit" class="primary">📋 Lag handleliste på Oda</button>
       {% else %}
-      <button type="submit" class="primary">➕ Legg manglene i ny liste på Oda</button>
+      <button type="submit" class="primary">➕ Lag liste med disse varene</button>
       {% endif %}
     </div>
     <div id="result"></div>
