@@ -15,9 +15,10 @@ forlater maskinen.
    uv sync
    ```
 
-Det er ikke nødvendig å lage `.env` lenger. Hvis du har flere
-nettlesere installert og vil styre hvilken som brukes, sett
-`ODA_BROWSER=firefox` (eller `chrome`, `safari`, ...) i miljøet.
+Hvis du har flere nettlesere innlogget på Oda samtidig, brukes den
+første som har en gyldig session-cookie (Firefox før Chrome før Safari
+osv.). Overstyr med `ODA_BROWSER=firefox` i miljøet hvis du vil tvinge
+en spesifikk.
 
 På macOS vil Chrome/Brave/Edge spørre om Keychain-tilgang første gang,
 fordi cookies er kryptert med systemnøkkelen. Firefox krever ingen
