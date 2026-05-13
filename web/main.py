@@ -43,6 +43,12 @@ _CART: pd.DataFrame | None = None
 _CART_TIME = 0.0
 _CART_TTL = 120.0
 
+DEFAULT_CYCLE = 14
+DEFAULT_TOP = 40
+DEFAULT_MAX_PER_CAT = 8
+
+_BASELINE_IDS: set[int] | None = None
+
 _STATUS_CLASS = {
     "forfalt": "forfalt",
     "akkurat nå": "nå",
@@ -64,6 +70,25 @@ def get_cart() -> pd.DataFrame:
         _CART = fetch_cart(build_client())
         _CART_TIME = time()
     return _CART
+
+
+def get_baseline_ids() -> set[int]:
+    """Produkt-id-er som er med ved default-filtre — brukes til å markere
+    rader som *kommer til* når brukeren utvider filtrene."""
+    global _BASELINE_IDS
+    if _BASELINE_IDS is None:
+        baseline = curate(
+            get_lines(),
+            list_cycle_days=DEFAULT_CYCLE,
+            top_n=DEFAULT_TOP,
+            max_per_category=DEFAULT_MAX_PER_CAT,
+        )
+        _BASELINE_IDS = (
+            {int(x) for x in baseline["product_id"]}
+            if not baseline.empty
+            else set()
+        )
+    return _BASELINE_IDS
 
 
 def _mode_urls(
@@ -108,12 +133,14 @@ def _build_rows(
     search: str,
     new_list: bool,
     top_up: bool,
-) -> tuple[list[dict], int]:
+) -> tuple[list[dict], int, int]:
     ideal = curate(
         lines, list_cycle_days=cycle, top_n=top, max_per_category=max_per_cat
     )
     if ideal.empty:
-        return [], 0
+        return [], 0, 0
+
+    baseline_ids = get_baseline_ids()
 
     cart_total = 0
     if not new_list:
@@ -131,6 +158,7 @@ def _build_rows(
         ideal = ideal[mask].reset_index(drop=True)
 
     rows: list[dict] = []
+    extra_count = 0
     for _, r in ideal.iterrows():
         forslag = int(r["foreslått_antall"])
         if new_list:
@@ -142,9 +170,14 @@ def _build_rows(
             mangler = int(r["mangler"])
             default_qty = mangler
 
+        pid = int(r["product_id"])
+        is_extra = pid not in baseline_ids
+        if is_extra:
+            extra_count += 1
+
         rows.append(
             {
-                "product_id": int(r["product_id"]),
+                "product_id": pid,
                 "category": r["category"],
                 "key": str(r["key"]).capitalize(),
                 "product_name": r["product_name"],
@@ -159,9 +192,10 @@ def _build_rows(
                 "last": r["last"].date().isoformat()
                 if r["last"] is not None
                 else "—",
+                "is_extra": is_extra,
             }
         )
-    return rows, cart_total
+    return rows, cart_total, extra_count
 
 
 @app.get("/", response_class=RedirectResponse)
@@ -182,9 +216,10 @@ def legacy_restock() -> RedirectResponse:
 
 @app.get("/reload", response_class=RedirectResponse)
 def reload_data() -> RedirectResponse:
-    global _LINES, _CART
+    global _LINES, _CART, _BASELINE_IDS
     _LINES = None
     _CART = None
+    _BASELINE_IDS = None
     return RedirectResponse("/handleliste")
 
 
@@ -198,7 +233,7 @@ def handleliste(
     new_list: bool = False,
     top_up: bool = False,
 ) -> HTMLResponse:
-    rows, cart_total = _build_rows(
+    rows, cart_total, extra_count = _build_rows(
         get_lines(), cycle, top, max_per_cat, search, new_list, top_up
     )
     url_diff, url_new_list = _mode_urls(cycle, top, max_per_cat, search, top_up)
@@ -214,6 +249,7 @@ def handleliste(
             "top_up": top_up,
             "rows": rows,
             "cart_total": cart_total,
+            "extra_count": extra_count,
             "url_diff": url_diff,
             "url_new_list": url_new_list,
         },
@@ -230,12 +266,12 @@ def handleliste_table(
     new_list: bool = False,
     top_up: bool = False,
 ) -> HTMLResponse:
-    rows, _ = _build_rows(
+    rows, _, extra_count = _build_rows(
         get_lines(), cycle, top, max_per_cat, search, new_list, top_up
     )
     return templates.TemplateResponse(
         request, "_list_table.html",
-        {"rows": rows, "new_list": new_list},
+        {"rows": rows, "new_list": new_list, "extra_count": extra_count},
     )
 
 

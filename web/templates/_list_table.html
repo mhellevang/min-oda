@@ -22,7 +22,7 @@
   </thead>
   <tbody>
     {% for r in rows %}
-    <tr>
+    <tr {% if r.is_extra %}class="is-extra" title="Kommer fram fordi du utvidet et filter"{% endif %}>
       <td class="muted">{{ r.category }}</td>
       <td>{{ r.key }}</td>
       <td>{{ r.product_name }}</td>
@@ -45,7 +45,11 @@
   </tbody>
 </table>
 <p class="muted" style="font-size: 12px; margin-top: 10px;">
-  {{ rows | length }} varer · sett antallet til 0 for å hoppe over en vare.
+  {{ rows | length }} varer ·
+  {% if extra_count %}
+  <span style="color: var(--accent);">{{ extra_count }} kom til fordi du utvidet filtrene</span> ·
+  {% endif %}
+  sett antallet til 0 for å hoppe over en vare.
 </p>
 {% else %}
 <p class="muted">
