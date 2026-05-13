@@ -1,17 +1,9 @@
-# Oda-analyse
+# Min Oda
 
-Personlig assistent for oda.com-handelen din. Bygger på din egen
-handlehistorikk — alt kjører lokalt, ingenting forlater maskinen.
-
-- **Handleliste**: bygg en gjenbrukbar ukehandel-mal eller suppler
-  kurven din med varer du pleier å ha med, basert på faktisk
-  kjøpsmønster og kadens per varetype. Skriver listen rett til Oda.
-- **Innsikt**: hva sier handleturene om husstanden? Matkultur,
-  helsesignaler, drikkeprofil, sesongprodukter, basket-analyse og mer.
-
-> Personlig vibe-koding. Bruker et udokumentert Oda-endepunkt med din egen
-> session-cookie — du sender ingenting til en tredjepart, men det kan slutte
-> å virke når Oda oppdaterer API-et sitt. Fork eller bruk som template.
+Henter handlehistorikken din fra oda.com og bruker den til to ting:
+bygge handlelister (eller supplere kurven med varer som mangler), og
+vise mønstre i hva du faktisk handler. Alt kjører lokalt. Ingenting
+forlater maskinen.
 
 ## Oppsett
 
@@ -50,7 +42,7 @@ make web
 
 Starter FastAPI + HTMX-appen på `http://localhost:8000`. To faner:
 
-**Handleliste** (`/handleliste`) — to moduser:
+**Handleliste** (`/handleliste`) har to moduser:
 
 - *Legg til handlekurv* (default): sammenligner faste varer med kurven
   din på oda.com akkurat nå og viser kun det som mangler. Juster antall,
@@ -60,15 +52,15 @@ Starter FastAPI + HTMX-appen på `http://localhost:8000`. To faner:
 
 Begge moduser viser status-pills (forfalt / snart / i rute) og hvor
 mange dager til (eller siden) varen typisk trenger å handles. Slidere
-for syklus, maks antall varer og maks per kategori — rader som dukker
-opp fordi du har utvidet et filter markeres med en aksent-stripe så du
-ser hva som er "ekstra" sammenlignet med default.
+for syklus, maks antall varer og maks per kategori. Rader som dukker
+opp fordi du har utvidet et filter, markeres med en aksent-stripe så
+du ser hva som er "ekstra" sammenlignet med default.
 
-**Innsikt** (`/innsikt`) — hva sier handleturene om husstanden?
+**Innsikt** (`/innsikt`): hva sier handleturene om husstanden?
 
 - Nøkkeltall (totalt brukt, snitt per ordre, frekvens)
 - Månedlig forbruk-graf (med årlig sesongmønster)
-- Husstandens DNA — varer i mer enn 40 % av ordrene
+- Husstandens DNA: varer i mer enn 40 % av ordrene
 - Matkultur (norsk / italiensk / asiatisk / tex-mex / indisk)
 - Kokestil (råvarer vs. ferdigmat) + prisbevissthet + helsesignaler
 - Drikkeprofil (brus / øl / juice / kaffe / vann)
@@ -88,9 +80,9 @@ make all       # refresh + web
 
 ## Sikkerhet
 
-- `.env` og `data/` er gitignored — cookies og personlig handlehistorikk
+- `.env` og `data/` er gitignored, så cookies og handlehistorikk
   forlater aldri maskinen.
-- Session-cookien er den eneste credentialen som brukes — passordet ditt
-  rører vi ikke.
-- Cookien utløper etter en stund; logg inn på nytt og oppdater `.env` om
-  du får 401/403.
+- Det er kun session-cookien som brukes til autentisering, ikke
+  brukernavn og passord.
+- Cookien utløper etter en stund. Hvis du får 401/403, logg inn på
+  nytt og oppdater `.env`.
