@@ -29,7 +29,7 @@ from fastapi.templating import Jinja2Templates
 from build_list import add_products, create_list, curate, load
 from cart_diff import compute_diff, fetch_cart
 from data_loader import load_both
-from fetch_orders import build_client, maybe_refresh_data
+from fetch_orders import MissingCredentials, build_client, maybe_refresh_data
 
 from . import innsikt
 
@@ -131,10 +131,21 @@ def get_lines() -> pd.DataFrame:
     return _LINES
 
 
+_EMPTY_CART = pd.DataFrame(
+    columns=["product_id", "product_name", "category", "quantity", "_type"]
+)
+
+
 def get_cart() -> pd.DataFrame:
+    """Hent handlekurv fra Oda. Hvis cookies mangler, returner tom kurv så
+    siden fortsatt rendrer. Auth-banneret over forteller brukeren hva som
+    er galt."""
     global _CART, _CART_TIME
     if _CART is None or (time() - _CART_TIME) > _CART_TTL:
-        _CART = fetch_cart(build_client())
+        try:
+            _CART = fetch_cart(build_client())
+        except MissingCredentials:
+            _CART = _EMPTY_CART
         _CART_TIME = time()
     return _CART
 

@@ -33,10 +33,20 @@ ORDERS_ENDPOINT = "https://oda.com/api/v1/orders/"
 
 
 class MissingCredentials(RuntimeError):
-    """Raised when .env mangler ODA_COOKIE / ODA_SESSIONID."""
+    """Reises når vi verken finner cookies i .env eller i en innlogget nettleser."""
+
+
+_LAST_AUTH_SOURCE = "ukjent"
+
+
+def last_auth_source() -> str:
+    """Hvor kom credentials sist fra: '.env', 'firefox', 'chrome', osv.
+    Brukes til feilmeldinger som peker brukeren tilbake til riktig sted."""
+    return _LAST_AUTH_SOURCE
 
 
 def build_client() -> httpx.Client:
+    global _LAST_AUTH_SOURCE
     load_dotenv()
 
     cookie_header = os.environ.get("ODA_COOKIE", "").strip()
@@ -47,11 +57,24 @@ def build_client() -> httpx.Client:
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:128.0) Gecko/20100101 Firefox/128.0",
     )
 
-    if not cookie_header and not sessionid:
-        raise MissingCredentials(
-            "Mangler credentials. Kopier .env.example til .env og fyll inn "
-            "enten ODA_COOKIE eller ODA_SESSIONID + ODA_CSRFTOKEN."
-        )
+    if cookie_header or sessionid:
+        _LAST_AUTH_SOURCE = ".env"
+    else:
+        # Ingen creds i .env. Prøv å plukke fra nettleserens cookie-store.
+        from auth import load_browser_cookies
+
+        preferred = os.environ.get("ODA_BROWSER", "").strip() or None
+        loaded = load_browser_cookies(preferred)
+        if not loaded:
+            hint = f" (prøvde '{preferred}')" if preferred else ""
+            raise MissingCredentials(
+                f"Fant ingen Oda-cookies{hint}. Logg inn på oda.com i "
+                "Firefox/Chrome/Safari/Edge/Brave, eller sett ODA_SESSIONID i .env."
+            )
+        cookies_dict, browser_name = loaded
+        sessionid = cookies_dict.get("sessionid", "")
+        csrftoken = cookies_dict.get("csrftoken", "")
+        _LAST_AUTH_SOURCE = browser_name
 
     cookies: dict[str, str] = {}
     if sessionid:
@@ -92,10 +115,14 @@ def try_get(client: httpx.Client, url: str) -> dict | list | None:
         return r.json()
 
     if r.status_code in (401, 403):
-        console.print(
-            f"  [red]{r.status_code}[/red] — cookien er utløpt eller mangler. "
-            "Logg inn på nytt i Firefox og kopier ny sessionid."
-        )
+        src = last_auth_source()
+        if src == ".env":
+            hint = "Cookien i .env er utløpt. Logg inn på oda.com og oppdater verdiene."
+        elif src == "ukjent":
+            hint = "Logg inn på oda.com i nettleseren og prøv igjen."
+        else:
+            hint = f"Cookien fra {src} er utløpt. Logg inn på oda.com igjen i {src}."
+        console.print(f"  [red]{r.status_code}[/red] {hint}")
         return None
 
     console.print(f"  [yellow]{r.status_code}[/yellow] {ctype[:60]}")
@@ -196,8 +223,10 @@ def fetch_all(
     Returnerer antall ordrer."""
     orders = fetch_with_pagination(client, base_url)
     if not orders:
+        src = last_auth_source()
+        where = f"i {src}" if src not in (".env", "ukjent") else "på oda.com"
         raise RuntimeError(
-            "Fant ingen ordrer fra Oda. Sannsynligvis utløpt cookie."
+            f"Fant ingen ordrer fra Oda. Sannsynligvis utløpt cookie. Logg inn {where} igjen."
         )
     save(orders, "orders.json")
 

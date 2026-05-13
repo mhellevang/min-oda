@@ -284,6 +284,39 @@
     .alert.warn { background: #fff4d4; color: #8a6d00; }
     .alert.error { background: var(--warn-soft); color: #b71c1c; }
     .alert a { color: inherit; font-weight: 600; }
+    .auth-banner {
+      background: var(--warn-soft);
+      border: 1px solid #f4c5c5;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      color: #7a1414;
+      font-size: 14px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .auth-banner .icon {
+      font-size: 18px;
+      line-height: 1;
+      margin-top: 1px;
+    }
+    .auth-banner strong { color: #5a0e0e; }
+    .auth-banner p { margin: 2px 0 0; }
+    .auth-banner form { display: inline; margin: 0; }
+    .auth-banner button {
+      margin-top: 8px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      background: #b71c1c;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .auth-banner button:hover { background: #8c1414; }
     footer { color: var(--muted); font-size: 12px; margin-top: 32px; text-align: center; }
     .htmx-indicator { display: none; }
     .htmx-request .htmx-indicator { display: inline; }
@@ -299,6 +332,22 @@
         {% include "_refresh_status.html" %}
       </div>
     </nav>
+    {% set rs = refresh_status() %}
+    {% if rs.error %}
+    <div class="auth-banner" role="alert">
+      <span class="icon">⚠</span>
+      <div>
+        <strong>Kunne ikke hente data fra Oda.</strong>
+        <p>{{ rs.error }}</p>
+        <p>Logg inn på oda.com i nettleseren din, og prøv så på nytt.</p>
+        <button type="button"
+                hx-post="/refresh"
+                hx-target="#refresh-status"
+                hx-swap="innerHTML"
+                hx-on::after-request="window.location.reload()">Prøv på nytt</button>
+      </div>
+    </div>
+    {% endif %}
     {% block content %}{% endblock %}
     <footer>Oda-analyse · personlig</footer>
   </div>

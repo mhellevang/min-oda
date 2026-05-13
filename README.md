@@ -7,15 +7,29 @@ forlater maskinen.
 
 ## Oppsett
 
-1. Logg inn på oda.com i Firefox.
-2. Hent session-cookien:
-   - Trykk `F12` → fanen **Storage** (eller **Lagring**) → **Cookies** → `https://oda.com`
-   - Kopier verdien til `sessionid` og `csrftoken`.
-3. Kopier `.env.example` til `.env` og lim inn verdiene.
-4. Installer avhengigheter:
+1. Logg inn på oda.com i nettleseren din (Firefox, Chrome, Safari, Edge,
+   Brave, Arc, Opera, Vivaldi, Chromium eller LibreWolf). Hold den
+   innlogget. Appen leser session-cookien direkte fra nettleseren.
+2. Installer avhengigheter:
    ```sh
    uv sync
    ```
+
+Det er ikke nødvendig å lage `.env` lenger. Hvis du har flere
+nettlesere installert og vil styre hvilken som brukes, sett
+`ODA_BROWSER=firefox` (eller `chrome`, `safari`, ...) i miljøet.
+
+På macOS vil Chrome/Brave/Edge spørre om Keychain-tilgang første gang,
+fordi cookies er kryptert med systemnøkkelen. Firefox krever ingen
+prompt.
+
+### Manuell cookie (fallback)
+
+Hvis automatikken ikke fungerer (uvanlig nettleserprofil, sandkasse,
+etc.), kopier `.env.example` til `.env` og lim inn `sessionid` og
+`csrftoken` fra DevTools (`F12` → **Storage** → **Cookies** →
+`https://oda.com`). Når `.env` har verdier, brukes de fremfor
+nettleser-cookies.
 
 ## Start
 
@@ -30,6 +44,7 @@ via knappen `⟳` øverst til høyre.
 
 Første gang du starter, eller hvis cookien er utløpt, vises en
 advarsel i navigasjonen og appen kjører videre med eksisterende data.
+Logg inn på oda.com på nytt i nettleseren og trykk `⟳` for å fortsette.
 
 ### Hente data manuelt
 
@@ -84,6 +99,8 @@ du ser hva som er "ekstra" sammenlignet med default.
 - `.env` og `data/` er gitignored, så cookies og handlehistorikk
   forlater aldri maskinen.
 - Det er kun session-cookien som brukes til autentisering, ikke
-  brukernavn og passord.
+  brukernavn og passord. Cookien leses lokalt fra nettleserens egen
+  cookie-database (via biblioteket `rookiepy`) og sendes kun til
+  oda.com.
 - Cookien utløper etter en stund. Hvis du får 401/403, logg inn på
-  nytt og oppdater `.env`.
+  oda.com igjen i nettleseren og trykk `⟳`.
