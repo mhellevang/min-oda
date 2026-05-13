@@ -77,7 +77,6 @@ ser hva som er "ekstra" sammenlignet med default.
 make refresh   # hent nye ordrer + bygg CSV
 make web       # start web-appen
 make all       # refresh + web
-make clean     # slett genererte plots
 ```
 
 ## Sikkerhet
