@@ -2,14 +2,29 @@
 {% block title %}Handleliste — Oda-analyse{% endblock %}
 {% block content %}
 <h1>Handleliste</h1>
+
+<div class="mode-toggle" role="tablist" aria-label="Hva vil du gjøre">
+  <a href="{{ url_diff }}"
+     class="{% if not new_list %}active{% endif %}"
+     role="tab" aria-selected="{{ 'true' if not new_list else 'false' }}">
+    🛒 Legg til handlekurv
+  </a>
+  <a href="{{ url_new_list }}"
+     class="{% if new_list %}active{% endif %}"
+     role="tab" aria-selected="{{ 'true' if new_list else 'false' }}">
+    📋 Lagre som handleliste
+  </a>
+</div>
+
 <p class="subtitle">
   {% if new_list %}
   Her er en handleliste basert på det du pleier å kjøpe. Juster antallet
-  (sett 0 for å hoppe over en vare), gi listen et navn og lag den på Oda.
+  (sett 0 for å hoppe over en vare), gi listen et navn og lagre den på
+  Oda til neste gang.
   {% else %}
   Du pleier å handle disse varene, men de ligger ikke i kurven din
-  ({{ cart_total }} varer der nå). Juster antallet og lag en liste
-  du kan legge rett til kurven på Oda.
+  ({{ cart_total }} varer der nå). Juster antallet og send dem til Oda
+  som en liste du kan legge rett i kurven.
   {% endif %}
 </p>
 
@@ -17,6 +32,10 @@
       hx-post="/handleliste/create"
       hx-target="#result"
       hx-swap="innerHTML">
+
+  {# Modus følger med på POST slik at /create vet hvilken liste som lages.
+     Segmentert kontroll over er anchor-baserte lenker, ikke form-felt. #}
+  <input type="hidden" name="new_list" value="{{ 'true' if new_list else 'false' }}">
 
   <section>
     <div class="controls">
@@ -54,31 +73,14 @@
       </label>
     </div>
 
-    {# Modus-toggle: triggrer full page reload slik at URL, kolonner,
-       hjelpetekst og knappetekst speiler valgt modus. #}
-    <label class="checkbox-row">
-      <input type="checkbox" name="new_list" value="true"
-             {% if new_list %}checked{% endif %}
-             hx-get="/handleliste"
-             hx-trigger="change"
-             hx-include="closest form"
-             hx-target="body" hx-swap="outerHTML"
-             hx-push-url="true">
-      <span>
-        <strong>Vis hele handlelisten</strong>
-        <span class="muted">— ikke bare det som mangler i kurven.</span>
-      </span>
-    </label>
-
     {% if not new_list %}
-    <label class="checkbox-row" style="padding-left: 26px;">
+    <label class="checkbox-row">
       <input type="checkbox" name="top_up" value="true"
              {% if top_up %}checked{% endif %}
-             hx-get="/handleliste"
+             hx-get="/handleliste/table"
              hx-trigger="change"
              hx-include="closest form"
-             hx-target="body" hx-swap="outerHTML"
-             hx-push-url="true">
+             hx-target="#table-wrap" hx-swap="innerHTML">
       <span>
         Ta også med varer du har for få av i kurven
         <span class="muted">(fyll opp resten)</span>
@@ -98,9 +100,9 @@
              value="Ukehandel — familien"
              required
              aria-label="Listenavn">
-      <button type="submit" class="primary">📋 Lag handleliste på Oda</button>
+      <button type="submit" class="primary">💾 Lagre på Oda</button>
       {% else %}
-      <button type="submit" class="primary">➕ Lag liste med disse varene</button>
+      <button type="submit" class="primary">📤 Send til Oda</button>
       {% endif %}
     </div>
     <div id="result"></div>

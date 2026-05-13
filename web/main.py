@@ -20,6 +20,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from time import time
+from urllib.parse import urlencode
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -63,6 +64,32 @@ def get_cart() -> pd.DataFrame:
         _CART = fetch_cart(build_client())
         _CART_TIME = time()
     return _CART
+
+
+def _mode_urls(
+    cycle: int, top: int, max_per_cat: int, search: str, top_up: bool
+) -> tuple[str, str]:
+    """Bygg URL-er for modus-bytte som preserverer ikke-default filtre."""
+    base: dict[str, str | int] = {}
+    if cycle != 14:
+        base["cycle"] = cycle
+    if top != 40:
+        base["top"] = top
+    if max_per_cat != 8:
+        base["max_per_cat"] = max_per_cat
+    if search:
+        base["search"] = search
+
+    diff_params = dict(base)
+    if top_up:
+        diff_params["top_up"] = "true"
+    new_list_params = dict(base, new_list="true")
+
+    url_diff = "/handleliste"
+    if diff_params:
+        url_diff = f"{url_diff}?{urlencode(diff_params)}"
+    url_new_list = f"/handleliste?{urlencode(new_list_params)}"
+    return url_diff, url_new_list
 
 
 def _format_due(d: int) -> str:
@@ -174,6 +201,7 @@ def handleliste(
     rows, cart_total = _build_rows(
         get_lines(), cycle, top, max_per_cat, search, new_list, top_up
     )
+    url_diff, url_new_list = _mode_urls(cycle, top, max_per_cat, search, top_up)
     return templates.TemplateResponse(
         request,
         "handleliste.html",
@@ -186,6 +214,8 @@ def handleliste(
             "top_up": top_up,
             "rows": rows,
             "cart_total": cart_total,
+            "url_diff": url_diff,
+            "url_new_list": url_new_list,
         },
     )
 
