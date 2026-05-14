@@ -6,10 +6,10 @@ kurven regnes "melk"-behovet som dekket selv om build_list foreslo et
 annet merke. Det forhindrer falske mangler ved merkebytte.
 
 Bruk:
-    uv run cart_diff.py                   # forhåndsvisning av mangler
-    uv run cart_diff.py --top-up          # ta også med varer med for lavt antall
-    uv run cart_diff.py --cycle 7         # ukentlig syklus (default 14)
-    uv run cart_diff.py --create          # opprett liste på oda.com
+    uv run python -m min_oda.cart_diff                   # forhåndsvisning av mangler
+    uv run python -m min_oda.cart_diff --top-up          # ta også med varer med for lavt antall
+    uv run python -m min_oda.cart_diff --cycle 7         # ukentlig syklus (default 14)
+    uv run python -m min_oda.cart_diff --create          # opprett liste på oda.com
 """
 
 from __future__ import annotations
@@ -20,14 +20,14 @@ import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
-from build_list import add_products, create_list, curate, load
-from fetch_orders import build_client
-from product_types import product_type
+from .build_list import curate
+from .data_loader import load_both
+from .oda_client import LIST_URL, add_products, build_client, create_list
+from .product_types import product_type
 
 console = Console()
 
 CART_URL = "https://oda.com/api/v1/cart/?group-by=categories"
-LIST_URL = "https://oda.com/api/v1/product-lists/"
 
 
 def fetch_cart(client) -> pd.DataFrame:
@@ -129,7 +129,7 @@ def main() -> None:
                    default="Forslag basert på diff mellom faste varer og handlekurv")
     args = p.parse_args()
 
-    lines = load()
+    _, lines = load_both()
     ideal = curate(lines, list_cycle_days=args.cycle, top_n=args.top)
     if ideal.empty:
         console.print("[yellow]Ingen kandidater fra build_list — sjekk data.[/yellow]")

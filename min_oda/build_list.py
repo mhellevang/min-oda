@@ -6,33 +6,27 @@ stabil kjøpsrytme velges sist kjøpte produkt som representant, og antall
 beregnes fra listesyklus / median-intervall.
 
 Bruk:
-    uv run build_list.py                  # forhåndsvisning, oppretter ingenting
-    uv run build_list.py --create         # oppretter listen på oda.com
-    uv run build_list.py --title "X"      # egendefinert tittel
-    uv run build_list.py --cycle 7        # ukentlig syklus (default 14 d)
+    uv run python -m min_oda.build_list                  # forhåndsvisning, oppretter ingenting
+    uv run python -m min_oda.build_list --create         # oppretter listen på oda.com
+    uv run python -m min_oda.build_list --title "X"      # egendefinert tittel
+    uv run python -m min_oda.build_list --cycle 7        # ukentlig syklus (default 14 d)
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import math
-import time
-from pathlib import Path
 
-import httpx
 import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
-from fetch_orders import build_client
-from data_loader import load_lines, load_orders
-from product_types import product_type
-from restock import compute_cadence
+from .data_loader import load_both
+from .oda_client import LIST_URL, add_products, build_client, create_list
+from .product_types import product_type
+from .restock import compute_cadence
 
 console = Console()
-
-LIST_URL = "https://oda.com/api/v1/product-lists/"
 
 # Kategorier vi vil ha med i en god ukehandel — rangert etter familiens
 # fokus: barn først, så middag, så frokost/lunsj/snacks.
@@ -62,12 +56,6 @@ CATEGORY_PRIORITY = [
     "Vaskemiddel",
     "Husholdning",
 ]
-
-def load() -> pd.DataFrame:
-    orders = load_orders()
-    lines = load_lines(orders)
-    return lines.dropna(subset=["product_id", "product_name", "date"])
-
 
 def curate(
     lines: pd.DataFrame,
@@ -165,43 +153,6 @@ def show(curated: pd.DataFrame, cycle: int) -> None:
     console.print(t)
 
 
-def create_list(
-    client: httpx.Client, title: str, description: str
-) -> dict | None:
-    payload = {"title": title, "description": description}
-    r = client.post(LIST_URL, json=payload)
-    if r.status_code not in (200, 201):
-        console.print(f"[red]Kunne ikke opprette liste:[/red] {r.status_code} {r.text[:300]}")
-        return None
-    data = r.json()
-    console.print(f"[green]✓[/green] Opprettet liste id={data.get('id')} \"{data.get('title')}\"")
-    return data
-
-
-def add_products(
-    client: httpx.Client, list_id: int, items: list[tuple[int, int]]
-) -> int:
-    """POST batch av produkter. Returnerer antall vellykkede."""
-    url = f"https://oda.com/api/v1/product-lists/{list_id}/products/"
-    # Endepunktet venter et array — prøv noen rimelige former
-    candidates = [
-        [{"product_id": pid, "quantity": q} for pid, q in items],
-        [{"product": pid, "quantity": q} for pid, q in items],
-        [{"product": {"id": pid}, "quantity": q} for pid, q in items],
-    ]
-    for payload in candidates:
-        r = client.post(url, json=payload)
-        if r.status_code in (200, 201):
-            return len(items)
-        if r.status_code == 400:
-            console.print(f"  [dim]400 (prøver neste form): {r.text[:160]}[/dim]")
-            continue
-        console.print(f"  [red]{r.status_code}[/red] {r.text[:200]}")
-        return 0
-    console.print(f"  [yellow]400[/yellow] — ingen payload-form virket: {r.text[:200]}")
-    return 0
-
-
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--create", action="store_true", help="Opprett listen på oda.com")
@@ -218,7 +169,7 @@ def main() -> None:
                    help="Maks antall varetyper per Oda-kategori")
     args = p.parse_args()
 
-    lines = load()
+    _, lines = load_both()
     curated = curate(
         lines,
         list_cycle_days=args.cycle,

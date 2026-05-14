@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 
-DATA_DIR = Path(__file__).parent / "data"
+DATA_DIR = Path(__file__).parent.parent / "data"
 
 
 def load_orders() -> pd.DataFrame:

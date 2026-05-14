@@ -52,7 +52,7 @@ Logg inn på oda.com på nytt i nettleseren og trykk `⟳` for å fortsette.
 Hvis du vil tvinge en oppdatering fra terminalen:
 
 ```sh
-uv run python fetch_orders.py
+uv run python -m min_oda.fetch_orders
 ```
 
 Hvis ingen av de antatte endepunktene treffer, finn riktig URL i DevTools:
@@ -61,7 +61,7 @@ Hvis ingen av de antatte endepunktene treffer, finn riktig URL i DevTools:
 2. Network-fanen, filtrer XHR/Fetch.
 3. Finn en request som returnerer JSON med ordrelisten.
 4. Høyreklikk → Copy → Copy URL.
-5. Kjør `uv run python fetch_orders.py --url '<URL>'`.
+5. Kjør `uv run python -m min_oda.fetch_orders --url '<URL>'`.
 
 ## Funksjonalitet
 

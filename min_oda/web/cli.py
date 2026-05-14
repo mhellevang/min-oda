@@ -1,6 +1,6 @@
 """Console-entrypoint for `uv run min-oda`.
 
-Registrert i pyproject.toml som [project.scripts] min-oda = "web.cli:run".
+Registrert i pyproject.toml som [project.scripts] min-oda = "min_oda.web.cli:run".
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ import argparse
 
 
 def run() -> None:
-    """Start uvicorn med web.main:app — wrapped slik at pyproject-entry
+    """Start uvicorn med min_oda.web.main:app — wrapped slik at pyproject-entry
     kan kalle den uten å eksponere uvicorn-flagg direkte."""
     parser = argparse.ArgumentParser(description="Start Oda web-appen på localhost.")
     parser.add_argument("--host", default="127.0.0.1")
@@ -21,7 +21,7 @@ def run() -> None:
     import uvicorn
 
     uvicorn.run(
-        "web.main:app",
+        "min_oda.web.main:app",
         host=args.host,
         port=args.port,
         reload=not args.no_reload,

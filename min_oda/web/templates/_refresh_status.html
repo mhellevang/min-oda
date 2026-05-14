@@ -2,7 +2,7 @@
 {% if rs.error %}
 <span class="refresh-warn" title="{{ rs.error }}">⚠ kunne ikke oppdatere</span>
 {% else %}
-<span class="muted">Sist oppdatert: {{ rs.age_text }}</span>
+<span class="muted">Sist oppdatert: {{ rs.data_age_hours|format_age }}</span>
 {% endif %}
 <button class="refresh-btn"
         type="button"

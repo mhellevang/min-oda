@@ -18,7 +18,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
-DATA_DIR = Path(__file__).parent / "data"
+DATA_DIR = Path(__file__).parent.parent / "data"
 MAPPING_FILE = DATA_DIR / "product_types.json"
 
 

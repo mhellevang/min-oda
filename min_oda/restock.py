@@ -9,25 +9,24 @@ Bruk `--by-product` hvis du vil drille ned til konkrete produkt-id-er
 i stedet for varetyper (gir flere rader med færre datapunkter per).
 
 CLI:
-    uv run restock.py                       # neste 14 dager, per varetype
-    uv run restock.py --horizon 7
-    uv run restock.py --by-product          # drill ned til produkt-id
-    uv run restock.py --min-buys 4 --since 2024
-    uv run restock.py --all                 # også ikke-forfalte
+    uv run python -m min_oda.restock                       # neste 14 dager, per varetype
+    uv run python -m min_oda.restock --horizon 7
+    uv run python -m min_oda.restock --by-product          # drill ned til produkt-id
+    uv run python -m min_oda.restock --min-buys 4 --since 2024
+    uv run python -m min_oda.restock --all                 # også ikke-forfalte
 """
 
 from __future__ import annotations
 
 import argparse
 import re
-from pathlib import Path
 
 import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
-from data_loader import load_lines, load_orders
-from product_types import product_type
+from .data_loader import load_both
+from .product_types import product_type
 
 console = Console()
 
@@ -39,12 +38,6 @@ SIZE_CODED_RE = re.compile(
 SIZE_CODED_MAX_AGE_DAYS = 120
 
 EXCLUDE_KEYWORDS = ["gavekort", "pant"]
-
-
-def load() -> pd.DataFrame:
-    orders = load_orders()
-    lines = load_lines(orders)
-    return lines.dropna(subset=["product_id", "product_name", "date"])
 
 
 def compute_cadence(
@@ -74,7 +67,7 @@ def compute_cadence(
     days_since, median_days, cv, due_date, days_until_due, status.
     `key` er enten product_id (default) eller varetype-streng (by_type).
     """
-    df = lines.copy()
+    df = lines.dropna(subset=["product_id", "product_name", "date"]).copy()
     df["product_id"] = df["product_id"].astype(int)
     if since:
         df = df[df["date"].dt.year >= since]
@@ -281,7 +274,7 @@ def main() -> None:
 
     by_type = not args.by_product
 
-    lines = load()
+    _, lines = load_both()
     cadence = compute_cadence(
         lines,
         min_buys=args.min_buys,

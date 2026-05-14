@@ -34,8 +34,8 @@
         <input type="number" class="qty" name="qty_{{ r.product_id }}"
                value="{{ r.qty }}" min="0" step="1">
       </td>
-      <td><span class="status status-{{ r.status_class }}">{{ r.status }}</span></td>
-      <td class="num muted nowrap">{{ r.due_text }}</td>
+      <td><span class="status status-{{ r.status|status_class }}">{{ r.status }}</span></td>
+      <td class="num muted nowrap">{{ r.days_until_due|format_due }}</td>
       <td class="num muted nowrap">hver {{ r.median }}. d</td>
       {% if new_list %}
       <td class="muted nowrap">{{ r.last }}</td>

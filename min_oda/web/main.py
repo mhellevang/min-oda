@@ -13,23 +13,21 @@ og kan også oppdateres on-demand via knappen i navigasjonen (POST /refresh).
 from __future__ import annotations
 
 import logging
-import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from time import time
 from urllib.parse import urlencode
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pandas as pd
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from build_list import add_products, create_list, curate, load
-from cart_diff import compute_diff, fetch_cart
-from data_loader import load_both
-from fetch_orders import MissingCredentials, build_client, maybe_refresh_data
+from ..build_list import curate
+from ..cart_diff import compute_diff, fetch_cart
+from ..data_loader import load_both
+from ..fetch_orders import maybe_refresh_data
+from ..oda_client import MissingCredentials, add_products, build_client, create_list
 
 from . import innsikt
 
@@ -57,16 +55,18 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
 def _register_template_globals() -> None:
-    """Eksponer refresh_status() til alle templates uten å måtte legge
-    det inn manuelt i hver TemplateResponse."""
+    """Eksponer refresh_status() og format-filtre til alle templates uten
+    å måtte legge det inn manuelt i hver TemplateResponse."""
     templates.env.globals["refresh_status"] = refresh_status_ctx
+    templates.env.filters["format_age"] = format_age
+    templates.env.filters["format_due"] = format_due
+    templates.env.filters["status_class"] = status_class
 
 
 # Registrert i bunnen av modulen, etter at refresh_status_ctx er definert.
 
-_LINES: pd.DataFrame | None = None
 _ORDERS: pd.DataFrame | None = None
-_LINES_FULL: pd.DataFrame | None = None  # for /innsikt — har 'date' fra orders-merge
+_LINES: pd.DataFrame | None = None  # date er joined fra orders — brukes av både /handleliste og /innsikt
 _BASKET_CACHE: tuple | None = None
 _CART: pd.DataFrame | None = None
 _CART_TIME = 0.0
@@ -92,7 +92,8 @@ _STATUS_CLASS = {
 }
 
 
-def _format_age(hours: float | None) -> str:
+def format_age(hours: float | None) -> str:
+    """Jinja-filter: alder i timer → 'X min siden' / 'X t siden' / …"""
     if hours is None:
         return "ukjent"
     if hours < 1:
@@ -106,29 +107,47 @@ def _format_age(hours: float | None) -> str:
     return f"{days // 30} mnd siden"
 
 
+def format_due(d: int | float) -> str:
+    """Jinja-filter: dager til neste forfall → 'i dag' / 'X d siden' / 'om X d'."""
+    d = int(d)
+    if d == 0:
+        return "i dag"
+    if d < 0:
+        return f"{-d} d siden"
+    return f"om {d} d"
+
+
+def status_class(status: str) -> str:
+    """Jinja-filter: status-streng → kort CSS-klasse."""
+    return _STATUS_CLASS.get(status, "rute")
+
+
 def refresh_status_ctx() -> dict:
     return {
-        "age_text": _format_age(_REFRESH_STATUS.get("data_age_hours")),
+        "data_age_hours": _REFRESH_STATUS.get("data_age_hours"),
         "error": _REFRESH_STATUS.get("error"),
     }
 
 
 def invalidate_caches() -> None:
     """Nullstill alle in-memory caches — kalles etter en vellykket refresh."""
-    global _LINES, _ORDERS, _LINES_FULL, _CART, _BASELINE_IDS, _BASKET_CACHE
+    global _LINES, _ORDERS, _CART, _BASELINE_IDS, _BASKET_CACHE
     _LINES = None
     _ORDERS = None
-    _LINES_FULL = None
     _CART = None
     _BASELINE_IDS = None
     _BASKET_CACHE = None
 
 
+def _load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
+    global _ORDERS, _LINES
+    if _ORDERS is None or _LINES is None:
+        _ORDERS, _LINES = load_both()
+    return _ORDERS, _LINES
+
+
 def get_lines() -> pd.DataFrame:
-    global _LINES
-    if _LINES is None:
-        _LINES = load()
-    return _LINES
+    return _load_data()[1]
 
 
 _EMPTY_CART = pd.DataFrame(
@@ -152,10 +171,7 @@ def get_cart() -> pd.DataFrame:
 
 def get_orders_and_lines() -> tuple[pd.DataFrame, pd.DataFrame]:
     """Load orders + lines (med date joined) — cached. For /innsikt."""
-    global _ORDERS, _LINES_FULL
-    if _ORDERS is None or _LINES_FULL is None:
-        _ORDERS, _LINES_FULL = load_both()
-    return _ORDERS, _LINES_FULL
+    return _load_data()
 
 
 def get_basket() -> tuple:
@@ -211,14 +227,6 @@ def _mode_urls(
         url_diff = f"{url_diff}?{urlencode(diff_params)}"
     url_new_list = f"/handleliste?{urlencode(new_list_params)}"
     return url_diff, url_new_list
-
-
-def _format_due(d: int) -> str:
-    if d == 0:
-        return "i dag"
-    if d < 0:
-        return f"{-int(d)} d siden"
-    return f"om {int(d)} d"
 
 
 def _build_rows(
@@ -283,8 +291,7 @@ def _build_rows(
                 "qty": default_qty,
                 "median": int(round(r["median_days"])),
                 "status": r["status"],
-                "status_class": _STATUS_CLASS.get(r["status"], "rute"),
-                "due_text": _format_due(int(r["days_until_due"])),
+                "days_until_due": int(r["days_until_due"]),
                 "last": r["last"].date().isoformat()
                 if r["last"] is not None
                 else "—",
