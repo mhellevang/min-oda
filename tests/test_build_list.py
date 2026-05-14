@@ -1,0 +1,94 @@
+"""Tester for curate — bygger handleliste fra kadens."""
+
+from __future__ import annotations
+
+import pandas as pd
+import pytest
+
+from min_oda.build_list import curate
+
+TODAY = pd.Timestamp("2026-05-14", tz="UTC")
+
+
+def _line(pid, name, cat, oid, days_ago):
+    return {
+        "product_id": pid, "product_name": name, "category": cat,
+        "order_id": oid, "date": TODAY - pd.Timedelta(days=days_ago),
+        "quantity": 1, "line_total": 25.0,
+    }
+
+
+@pytest.fixture
+def lines_two_brands_of_milk() -> pd.DataFrame:
+    """TINE-melk: 4 ordrer over flere måneder.
+    Q-melk: 1 ordre, kjøpt for 3 dager siden (det nyeste).
+    Representativ skal være TINE (flest distinkte ordrer), ikke Q."""
+    rows = []
+    for i, d in enumerate([60, 40, 20, 10]):
+        rows.append(_line(100, "TINE Lettmelk 1 L", "Meieri", f"t{i}", d))
+    rows.append(_line(101, "Q-Meieriene Lettmelk 1 L", "Meieri", "q0", 3))
+    return pd.DataFrame(rows)
+
+
+@pytest.fixture
+def lines_many_meieri() -> pd.DataFrame:
+    """Mange ulike varetyper alle i kategorien Meieri."""
+    rows = []
+    types = [
+        (200, "TINE Lettmelk 1 L"),
+        (201, "TINE Skyr Naturell"),
+        (202, "TINE Kefir Naturell"),
+        (203, "TINE Crème Fraîche 18 %"),
+        (204, "TINE Rømme 18 %"),
+        (205, "TINE Smør Meierismør"),
+    ]
+    for pid, name in types:
+        for i, d in enumerate([28, 21, 14, 7]):
+            rows.append(_line(pid, name, "Meieri", f"{pid}-{i}", d))
+    return pd.DataFrame(rows)
+
+
+def test_representative_is_most_distinct_orders(lines_two_brands_of_milk):
+    """For varetype "melk" finnes to merker. Det med flest distinkte
+    ordrer skal velges som representant, selv om det andre er nyere."""
+    out = curate(lines_two_brands_of_milk)
+    melk = out[out["key"] == "melk"]
+    assert len(melk) == 1
+    assert "TINE" in str(melk["product_name"].iloc[0])
+
+
+def test_max_per_category_caps_rows(lines_many_meieri):
+    """Med 6 ulike varetyper i Meieri og max_per_category=3, skal vi få
+    kun 3 rader."""
+    out = curate(lines_many_meieri, max_per_category=3, top_n=50)
+    assert len(out) == 3
+    assert (out["category"] == "Meieri").all()
+
+
+def test_top_n_caps_total(lines_many_meieri):
+    """top_n trumfer per-kategori-grensen for totalt antall rader."""
+    out = curate(lines_many_meieri, max_per_category=10, top_n=2)
+    assert len(out) == 2
+
+
+def test_foreslatt_antall_scales_with_cycle(lines_many_meieri):
+    """qty = ceil(cycle / median). Med ukentlig kadens og 14-dagers
+    syklus skal forslag være 2 per vare."""
+    out = curate(lines_many_meieri, list_cycle_days=14, max_per_category=10)
+    assert (out["foreslått_antall"] >= 2).all()
+    out7 = curate(lines_many_meieri, list_cycle_days=7, max_per_category=10)
+    assert (out7["foreslått_antall"] == 1).all()
+
+
+def test_category_priority_orders_rows():
+    """Bleier kommer før Snacks i CATEGORY_PRIORITY — første rad skal være
+    fra Bleier når begge er kandidater."""
+    rows = []
+    # Bleier: navn må matche \bbleie-regelen for å klassifiseres.
+    for i, d in enumerate([28, 21, 14, 7]):
+        rows.append(_line(300, "Libero Bleier Comfort", "Bleier", f"bl{i}", d))
+    # Snacks: stabilt med navn som hopper på en av snacks-reglene.
+    for i, d in enumerate([28, 21, 14, 7]):
+        rows.append(_line(301, "Maarud Potetgull Salt", "Snacks", f"sn{i}", d))
+    out = curate(pd.DataFrame(rows), max_per_category=5, top_n=10)
+    assert out["category"].iloc[0] == "Bleier"
