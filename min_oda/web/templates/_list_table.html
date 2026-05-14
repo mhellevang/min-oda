@@ -12,7 +12,7 @@
       <th class="num">I kurv</th>
       <th class="num">Mangler</th>
       {% endif %}
-      <th>Status</th>
+      <th>Forfall</th>
       <th class="num">Trengs</th>
       <th class="num">Hvor ofte</th>
       {% if new_list %}
@@ -38,7 +38,7 @@
       <td class="num muted nowrap">{{ r.days_until_due|format_due }}</td>
       <td class="num muted nowrap">hver {{ r.median }}. d</td>
       {% if new_list %}
-      <td class="muted nowrap">{{ r.last }}</td>
+      <td class="muted nowrap" title="{{ r.last_label }}">{{ r.days_since|format_days_ago }}</td>
       {% endif %}
     </tr>
     {% endfor %}

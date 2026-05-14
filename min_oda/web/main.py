@@ -60,6 +60,7 @@ def _register_template_globals() -> None:
     templates.env.globals["refresh_status"] = refresh_status_ctx
     templates.env.filters["format_age"] = format_age
     templates.env.filters["format_due"] = format_due
+    templates.env.filters["format_days_ago"] = format_days_ago
     templates.env.filters["status_class"] = status_class
 
 
@@ -91,6 +92,20 @@ _STATUS_CLASS = {
     "i rute": "rute",
 }
 
+_NB_MONTHS_SHORT = ["", "jan", "feb", "mar", "apr", "mai", "jun",
+                    "jul", "aug", "sep", "okt", "nov", "des"]
+
+
+def _no_short_date(ts) -> str:
+    """Norsk kort datoform: '14. mai' i år, '14. mai 2025' ellers."""
+    if ts is None or pd.isna(ts):
+        return "—"
+    d = pd.Timestamp(ts)
+    today = pd.Timestamp.now()
+    if d.year == today.year:
+        return f"{d.day}. {_NB_MONTHS_SHORT[d.month]}"
+    return f"{d.day}. {_NB_MONTHS_SHORT[d.month]} {d.year}"
+
 
 def format_age(hours: float | None) -> str:
     """Jinja-filter: alder i timer → 'X min siden' / 'X t siden' / …"""
@@ -120,6 +135,24 @@ def format_due(d: int | float) -> str:
 def status_class(status: str) -> str:
     """Jinja-filter: status-streng → kort CSS-klasse."""
     return _STATUS_CLASS.get(status, "rute")
+
+
+def format_days_ago(days: int | float | None) -> str:
+    """Jinja-filter: dager siden et tidspunkt → menneskelig norsk."""
+    if days is None:
+        return "—"
+    days = int(days)
+    if days < 0:
+        return f"om {-days} d"
+    if days == 0:
+        return "i dag"
+    if days == 1:
+        return "i går"
+    if days < 30:
+        return f"{days} d siden"
+    if days < 365:
+        return f"{days // 30} mnd siden"
+    return f"{days // 365} år siden"
 
 
 def refresh_status_ctx() -> dict:
@@ -292,9 +325,8 @@ def _build_rows(
                 "median": int(round(r["median_days"])),
                 "status": r["status"],
                 "days_until_due": int(r["days_until_due"]),
-                "last": r["last"].date().isoformat()
-                if r["last"] is not None
-                else "—",
+                "days_since": int(r["days_since"]) if pd.notna(r.get("days_since")) else None,
+                "last_label": _no_short_date(r["last"]),
                 "is_extra": is_extra,
             }
         )
