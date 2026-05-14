@@ -95,6 +95,16 @@ du ser hva som er "ekstra" sammenlignet med default.
 - Basket-analyse: hvilke varer havner ofte sammen, og en
   *"når jeg kjøper X, hva følger med?"*-søk
 
+## Tester
+
+```sh
+uv run pytest
+```
+
+Dekker data-algoritmene (kadens, kurv-diff, kuratering, varetype-
+klassifisering) og en smoke-test av web-rutene. Web-testene hopper
+over hvis `data/orders.csv` mangler.
+
 ## Sikkerhet
 
 - `.env` og `data/` er gitignored, så cookies og handlehistorikk
