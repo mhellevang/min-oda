@@ -23,6 +23,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from .. import blocklist
 from ..build_list import curate
 from ..cart_diff import compute_diff, fetch_cart
 from ..data_loader import load_both
@@ -227,6 +228,7 @@ def get_baseline_ids() -> set[int]:
             list_cycle_days=DEFAULT_CYCLE,
             top_n=DEFAULT_TOP,
             max_per_category=DEFAULT_MAX_PER_CAT,
+            blocked=blocklist.blocked_ids(),
         )
         _BASELINE_IDS = (
             {int(x) for x in baseline["product_id"]}
@@ -234,6 +236,12 @@ def get_baseline_ids() -> set[int]:
             else set()
         )
     return _BASELINE_IDS
+
+
+def invalidate_blocklist_caches() -> None:
+    """Etter en blokk/avblokk er baseline ikke lenger riktig."""
+    global _BASELINE_IDS
+    _BASELINE_IDS = None
 
 
 def _mode_urls(
@@ -272,7 +280,8 @@ def _build_rows(
     top_up: bool,
 ) -> tuple[list[dict], int, int]:
     ideal = curate(
-        lines, list_cycle_days=cycle, top_n=top, max_per_category=max_per_cat
+        lines, list_cycle_days=cycle, top_n=top, max_per_category=max_per_cat,
+        blocked=blocklist.blocked_ids(),
     )
     if ideal.empty:
         return [], 0, 0
@@ -400,6 +409,7 @@ def handleliste(
             "extra_count": extra_count,
             "url_diff": url_diff,
             "url_new_list": url_new_list,
+            "blocked_items": blocklist.list_blocked(),
         },
     )
 
@@ -421,6 +431,67 @@ def handleliste_table(
         request, "_list_table.html",
         {"rows": rows, "new_list": new_list, "extra_count": extra_count},
     )
+
+
+async def _render_body_after_block_change(request: Request) -> HTMLResponse:
+    """Re-rendrer både tabellen og blokk-listen etter en blokk/avblokk.
+    Henter filtrene fra form-data (inkludert via hx-include) slik at
+    visningen beholder cycle/top/search/etc."""
+    form = await request.form()
+
+    def _int(name: str, default: int) -> int:
+        try:
+            return int(form.get(name) or default)
+        except (TypeError, ValueError):
+            return default
+
+    def _bool(name: str) -> bool:
+        val = form.get(name)
+        return str(val).lower() in {"true", "on", "1"}
+
+    rows, _, extra_count = _build_rows(
+        get_lines(),
+        cycle=_int("cycle", 14),
+        top=_int("top", 40),
+        max_per_cat=_int("max_per_cat", 8),
+        search=str(form.get("search") or ""),
+        new_list=_bool("new_list"),
+        top_up=_bool("top_up"),
+    )
+    return templates.TemplateResponse(
+        request,
+        "_handleliste_body.html",
+        {
+            "rows": rows,
+            "extra_count": extra_count,
+            "new_list": _bool("new_list"),
+            "blocked_items": blocklist.list_blocked(),
+        },
+    )
+
+
+@app.post("/handleliste/block", response_class=HTMLResponse)
+async def handleliste_block(request: Request) -> HTMLResponse:
+    form = await request.form()
+    try:
+        pid = int(str(form.get("product_id") or ""))
+    except ValueError:
+        return HTMLResponse("Ugyldig product_id", status_code=400)
+    blocklist.block(pid, name=str(form.get("name") or ""))
+    invalidate_blocklist_caches()
+    return await _render_body_after_block_change(request)
+
+
+@app.post("/handleliste/unblock", response_class=HTMLResponse)
+async def handleliste_unblock(request: Request) -> HTMLResponse:
+    form = await request.form()
+    try:
+        pid = int(str(form.get("product_id") or ""))
+    except ValueError:
+        return HTMLResponse("Ugyldig product_id", status_code=400)
+    blocklist.unblock(pid)
+    invalidate_blocklist_caches()
+    return await _render_body_after_block_change(request)
 
 
 @app.post("/handleliste/create", response_class=HTMLResponse)

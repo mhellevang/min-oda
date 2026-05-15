@@ -20,6 +20,7 @@ import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
+from .blocklist import blocked_ids
 from .build_list import curate
 from .data_loader import load_both
 from .oda_client import LIST_URL, add_products, build_client, create_list
@@ -130,7 +131,8 @@ def main() -> None:
     args = p.parse_args()
 
     _, lines = load_both()
-    ideal = curate(lines, list_cycle_days=args.cycle, top_n=args.top)
+    ideal = curate(lines, list_cycle_days=args.cycle, top_n=args.top,
+                   blocked=blocked_ids())
     if ideal.empty:
         console.print("[yellow]Ingen kandidater fra build_list — sjekk data.[/yellow]")
         return

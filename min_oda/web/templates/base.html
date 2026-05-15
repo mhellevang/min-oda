@@ -321,6 +321,76 @@
     .htmx-indicator { display: none; }
     .htmx-request .htmx-indicator { display: inline; }
     .htmx-request.htmx-indicator { display: inline; }
+    .hide-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--muted);
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      padding: 0;
+      font-family: inherit;
+    }
+    tr:hover .hide-btn { color: var(--ink); }
+    .hide-btn:hover {
+      color: var(--warn);
+      border-color: var(--rule);
+      background: var(--warn-soft);
+    }
+    .blocked-section {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px dashed var(--rule);
+    }
+    .blocked-section h3 {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin: 0 0 4px;
+    }
+    .blocked-chips {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 4px 4px 10px;
+      background: var(--bg);
+      border: 1px solid var(--rule);
+      border-radius: 999px;
+      font-size: 13px;
+    }
+    .chip-note {
+      font-size: 12px;
+    }
+    .chip-x {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+      font-family: inherit;
+    }
+    .chip-x:hover {
+      color: var(--warn);
+      background: var(--warn-soft);
+    }
   </style>
 </head>
 <body>

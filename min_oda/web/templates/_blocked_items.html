@@ -1,0 +1,22 @@
+{% if blocked_items %}
+<div class="blocked-section">
+  <h3>Skjulte varer ({{ blocked_items|length }})</h3>
+  <p class="muted" style="font-size: 12px; margin: 0 0 10px;">
+    Disse forslagene er midlertidig skjult. Klikk × for å vise dem igjen.
+  </p>
+  <ul class="blocked-chips">
+    {% for it in blocked_items %}
+    <li class="chip">
+      <span class="chip-text">{{ it.name or it.product_id }}</span>
+      {% if it.note %}<span class="muted chip-note">{{ it.note }}</span>{% endif %}
+      <button type="button" class="chip-x"
+              hx-post="/handleliste/unblock"
+              hx-vals='{"product_id": {{ it.product_id|tojson }}}'
+              hx-include="closest form"
+              hx-target="#table-and-blocked" hx-swap="innerHTML"
+              title="Vis {{ it.name or it.product_id }} igjen">×</button>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}

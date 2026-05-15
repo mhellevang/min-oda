@@ -21,6 +21,7 @@ import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
+from .blocklist import blocked_ids
 from .data_loader import load_both
 from .oda_client import LIST_URL, add_products, build_client, create_list
 from .product_types import product_type
@@ -62,6 +63,7 @@ def curate(
     list_cycle_days: int = 14,
     top_n: int = 40,
     max_per_category: int = 8,
+    blocked: set[int] | frozenset[int] = frozenset(),
 ) -> pd.DataFrame:
     """Bygg handleliste basert på restock-kadens per varetype.
 
@@ -74,6 +76,12 @@ def curate(
     produkter, sjeldne kjøp (median > 90 d), størrelses-kodede varer som
     vokses ut av. Produkter uten klassifisert varetype i `product_types`
     havner ikke på listen.
+
+    `blocked` er et sett av produkt-id-er som skal utelukkes fra
+    representant-valget — kadens-statistikken beholder fortsatt
+    historikken, men en annen variant innen samme varetype kan ta over
+    som forslag. Hvis alle varianter i en varetype er blokkert, faller
+    varetypen ut av forslagene.
     """
     cadence = compute_cadence(lines, by_type=True)
     if cadence.empty:
@@ -84,6 +92,13 @@ def curate(
     # ikke representerer den faste rytmen).
     df = lines.dropna(subset=["product_id", "product_name", "category"]).copy()
     df["product_id"] = df["product_id"].astype(int)
+    if blocked:
+        df = df[~df["product_id"].isin(blocked)]
+    if df.empty:
+        # Ingen kandidater igjen etter blokk-filter — varetypen droppes via
+        # det tomme rep-merge-et nedenfor. (apply på tom df returnerer
+        # DataFrame, ikke Series, og krasjer kolonne-assignment i pandas 2.)
+        return cadence.iloc[0:0]
     df["_type"] = df.apply(
         lambda r: product_type(r["product_name"], r.get("category"), r["product_id"]),
         axis=1,
@@ -175,6 +190,7 @@ def main() -> None:
         list_cycle_days=args.cycle,
         top_n=args.top,
         max_per_category=args.max_per_category,
+        blocked=blocked_ids(),
     )
     show(curated, cycle=args.cycle)
 

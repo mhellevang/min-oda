@@ -81,6 +81,14 @@ for syklus, maks antall varer og maks per kategori. Rader som dukker
 opp fordi du har utvidet et filter, markeres med en aksent-stripe så
 du ser hva som er "ekstra" sammenlignet med default.
 
+Klikk **×** på en rad for å skjule et produkt midlertidig fra
+forslag (typisk bleier i en størrelse barnet vokste forbi — barnet
+vokser kanskje inn i den igjen, så du vil ikke fjerne historikken).
+Et annet produkt i samme varetype tar automatisk over som forslag.
+Skjulte varer listes nederst på siden, klikk **×** på chip-en for å
+vise igjen. Listen lagres i `data/blocklist.json` og kan også
+redigeres for hånd.
+
 **Innsikt** (`/innsikt`): hva sier handleturene om husstanden?
 
 - Nøkkeltall (totalt brukt, snitt per ordre, frekvens)
