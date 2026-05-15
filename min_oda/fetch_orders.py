@@ -52,11 +52,27 @@ NB_MONTHS = {
     "juli": 7, "august": 8, "september": 9, "oktober": 10, "november": 11, "desember": 12,
 }
 
+# Oda bruker relative fraser for nylige leveringer — uten denne håndteringen
+# faller dagens (og gårsdagens) ordre ut av orders.csv siden den numeriske
+# regexen ikke treffer.
+_RELATIVE_DAY_OFFSETS = {
+    "i dag": 0,
+    "i går": 1,
+    "i forgårs": 2,
+}
+
 
 def parse_delivery_time(text: str | None, month_label: str | None) -> pd.Timestamp | None:
-    """Tolker 'fre 8. mai, 10:08' + månedsetikett ('Mai' eller 'November 2025') til dato."""
+    """Tolker 'fre 8. mai, 10:08' + månedsetikett ('Mai' eller 'November 2025')
+    eller relativ frase ('i dag, 09:10', 'i går, …') til dato."""
     if not text:
         return None
+    low = text.lower()
+    for phrase, days_back in _RELATIVE_DAY_OFFSETS.items():
+        if low.startswith(phrase):
+            today = pd.Timestamp.now(tz="Europe/Oslo").normalize()
+            return today - pd.Timedelta(days=days_back)
+
     m = re.search(r"(\d{1,2})\.\s*([a-zA-ZæøåÆØÅ]+)", text)
     if not m:
         return None
