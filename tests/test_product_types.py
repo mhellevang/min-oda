@@ -21,9 +21,43 @@ def test_specific_rule_wins_over_general():
 
 
 def test_baby_rule_before_general():
-    """Bleier/babymat skal klassifiseres riktig før mer generelle regler."""
-    assert product_type("Libero Bleier Comfort Str. 3", "Bleier") == "bleier"
-    assert product_type("Hipp Babymat Frukt 4 mnd", "Baby") == "babymat"
+    """Bleier/babymat skal klassifiseres riktig før mer generelle regler.
+    Størrelses-suffikset (str3, 4mnd) skiller subtyper innen samme varetype."""
+    assert product_type("Libero Bleier Comfort Str. 3", "Bleier") == "bleier-str3"
+    assert product_type("Hipp Babymat Frukt 4 mnd", "Baby") == "babymat-4mnd"
+
+
+def test_size_suffix_splits_diaper_sizes():
+    """Bleier i ulike størrelser skal få ulike varetype-keys så de ikke
+    konkurrerer om samme slot i handlelisten (treåring str. 6 + tvillinger
+    str. 3 må kunne eksistere parallelt)."""
+    assert product_type("Libero Touch bleie Str. 3, 5-9 kg", "Bleier") == "bleier-str3"
+    assert product_type("R Lev Vel bleier XL Str. 6, 15-30kg", "Bleier") == "bleier-str6"
+    # Str. dominerer over kg-rangen — vi vil ikke ha "bleier-15-30kg".
+    assert "kg" not in product_type("R Lev Vel bleier XL Str. 6, 15-30kg, 22 stk", "Bleier")
+
+
+def test_size_suffix_collapses_brands_within_same_size():
+    """Samme størrelse, forskjellig merke → samme varetype. Substitusjonen
+    skjer fortsatt innen et størrelsesnivå (Libero og Pampers str. 3 er
+    fortsatt utbyttbare for samme barn)."""
+    libero = product_type("Libero Touch bleie Str. 3, 5-9 kg", "Bleier")
+    pampers = product_type("Pampers Baby-Dry bleie Str. 3, 6-10kg", "Bleier")
+    assert libero == pampers == "bleier-str3"
+
+
+def test_size_suffix_from_age_label():
+    """Babymat og morsmelkerstatning bruker alder ('Fra N mnd', 'N mnd') —
+    NAN 1 (0 mnd) og NAN 2 (6 mnd) er genuint forskjellige stadier."""
+    assert product_type("Grogro Måltid Fra 6 mnd, 100 g", "Babymat") == "babymat-6mnd"
+    assert product_type("Grogro Pulvergrøt Fra 12 mnd, 300 g", "Babymat") == "babymat-12mnd"
+    assert product_type("Nestlé NAN Pro 1 fra 0 mnd, 1200 ml", "Baby") == "morsmelkerstatning-0mnd"
+
+
+def test_no_size_suffix_when_name_lacks_size_code():
+    """Vanlige varer uten størrelses-kode skal være uberørt."""
+    assert product_type("TINE Lettmelk 1 L", "Meieri") == "melk"
+    assert product_type("Korn Bakeri Solsikkebrød 620 g", "Bakeri") == "brød"
 
 
 def test_pizzadeig_before_brød():

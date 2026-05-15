@@ -245,6 +245,35 @@ _KEYWORD_RULES: list[tuple[re.Pattern[str], str]] = [
 ]
 
 
+# Størrelses-kode → suffiks. Bleier, babymat, morsmelkerstatning og lignende
+# kommer i sjikt som ikke er substituerbare for husholdninger med barn i
+# ulike aldre samtidig (treåring i str. 6, tvillinger i str. 3). Suffikset
+# splitter varetypen så hver størrelse får sin egen rytme og representant.
+# Patterns testes i rekkefølge — Str./Trinn./N mnd foretrekkes over kg-rangen
+# fordi de koder størrelsen direkte (bleier har typisk begge: "Str. 5, 12-25kg").
+_SIZE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"\bstr\.?\s*(\d+)", re.IGNORECASE), "str{0}"),
+    (re.compile(r"\btrinn\s*(\d+)", re.IGNORECASE), "trinn{0}"),
+    (re.compile(r"\bfra\s*(\d+)\s*mnd\b", re.IGNORECASE), "{0}mnd"),
+    (re.compile(r"\b(\d+)\s*mnd\b", re.IGNORECASE), "{0}mnd"),
+    (re.compile(r"\b(\d+)\s*-\s*(\d+)\s*kg\b", re.IGNORECASE), "{0}-{1}kg"),
+]
+
+
+def _extract_size_suffix(name: str) -> str | None:
+    """Plukk ut et kanonisk størrelses-suffiks ('str5', 'trinn3', '6mnd',
+    '12-25kg') fra et produktnavn, eller None hvis ingen størrelseskode finnes.
+
+    Brukes til å skille varianter av samme varetype som ikke er substituerbare
+    (bleier i str. 3 dekker ikke et behov for str. 6).
+    """
+    for pattern, fmt in _SIZE_PATTERNS:
+        m = pattern.search(name)
+        if m:
+            return fmt.format(*m.groups()).lower()
+    return None
+
+
 # Kategorier som siste fallback hvis ingenting matcher.
 _CATEGORY_FALLBACK = {
     "Frukt og grønt": "frukt-grønt-annet",
@@ -275,24 +304,34 @@ def product_type(name: str | None, category: str | None = None,
     """Returnerer varetype for et produkt.
 
     Søker først i den eksplisitte mappingen, så via keyword-regler over
-    produktnavnet, og til slutt via kategori-fallback. Returnerer None
-    hvis ingenting treffer (sjeldent — kategori-fallbacken dekker det
-    meste)."""
-    if product_id is not None:
-        explicit = _explicit_mapping().get(int(product_id))
-        if explicit:
-            return explicit
+    produktnavnet, og til slutt via kategori-fallback. Hvis produktnavnet
+    inneholder en størrelses-kode (Str. 5, Fra 6 mnd, Trinn 3, …) legges
+    den til som suffiks så ulike størrelser av samme varetype håndteres
+    som separate behov. Returnerer None hvis ingenting treffer (sjeldent —
+    kategori-fallbacken dekker det meste)."""
+    base: str | None = None
 
-    if name:
+    if product_id is not None:
+        base = _explicit_mapping().get(int(product_id))
+
+    if base is None and name:
         low = name.lower()
         for pattern, t in _KEYWORD_RULES:
             if pattern.search(low):
-                return t
+                base = t
+                break
 
-    if category and category in _CATEGORY_FALLBACK:
-        return _CATEGORY_FALLBACK[category]
+    if base is None and category and category in _CATEGORY_FALLBACK:
+        base = _CATEGORY_FALLBACK[category]
 
-    return None
+    if base is None:
+        return None
+
+    if name:
+        suffix = _extract_size_suffix(name)
+        if suffix:
+            return f"{base}-{suffix}"
+    return base
 
 
 def annotate_lines(lines):

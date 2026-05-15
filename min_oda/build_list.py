@@ -58,6 +58,17 @@ CATEGORY_PRIORITY = [
     "Husholdning",
 ]
 
+# Visse varetyper er kritiske uansett hvilken Oda-kategori produktet ender
+# i. Bleier som dukker opp under "Faste, gode deals" er fortsatt bleier —
+# uten denne overstyringen havner alle størrelses-subtyper i prio=999 og
+# blir presset ut av top_n-cuten.
+_TYPE_PRIORITY_OVERRIDE = {
+    "bleier": "Bleier",
+    "småbarn": "Småbarn 0-3",
+    "babymat": "Babymat 6 mnd.",
+    "morsmelkerstatning": "Småbarn 0-3",
+}
+
 def curate(
     lines: pd.DataFrame,
     list_cycle_days: int = 14,
@@ -122,13 +133,20 @@ def curate(
         lambda m: max(1, math.ceil(list_cycle_days / max(m, 1)))
     )
 
-    def prio(cat: str) -> int:
+    def prio(key: str, cat: str) -> int:
+        base_type = str(key).split("-", 1)[0]
+        promoted = _TYPE_PRIORITY_OVERRIDE.get(base_type)
+        if promoted:
+            try:
+                return CATEGORY_PRIORITY.index(promoted)
+            except ValueError:
+                pass
         try:
             return CATEGORY_PRIORITY.index(cat)
         except ValueError:
             return 999
 
-    out["_prio"] = out["category"].map(prio)
+    out["_prio"] = out.apply(lambda r: prio(r["key"], r["category"]), axis=1)
     out = out.sort_values(["_prio", "n_buys"], ascending=[True, False])
 
     keep = []

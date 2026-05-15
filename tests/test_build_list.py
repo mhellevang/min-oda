@@ -92,3 +92,22 @@ def test_category_priority_orders_rows():
         rows.append(_line(301, "Maarud Potetgull Salt", "Snacks", f"sn{i}", d))
     out = curate(pd.DataFrame(rows), max_per_category=5, top_n=10)
     assert out["category"].iloc[0] == "Bleier"
+
+
+def test_baby_type_promoted_over_deal_category():
+    """Bleier som Oda har plassert under 'Faste, gode deals' skal fortsatt
+    prioriteres høyt — uten overstyringen havner alle bleier-størrelser
+    bakerst og blir presset ut av top_n-cuten når det er konkurranse."""
+    rows = []
+    for i, d in enumerate([28, 21, 14, 7]):
+        rows.append(_line(400, "Libero bleie Str. 3, 5-9 kg", "Faste, gode deals", f"d3-{i}", d))
+    for i, d in enumerate([28, 21, 14, 7]):
+        rows.append(_line(401, "Libero bleie Str. 6, 15-30kg", "Faste, gode deals", f"d6-{i}", d))
+    # Et lavprioritert fyllprodukt — hvis bleier ikke prioriteres ender
+    # det opp før dem.
+    for i, d in enumerate([28, 21, 14, 7]):
+        rows.append(_line(402, "Maarud Potetgull Salt", "Snacks", f"sn{i}", d))
+    out = curate(pd.DataFrame(rows), max_per_category=5, top_n=2)
+    keys = list(out["key"])
+    assert "bleier-str3" in keys
+    assert "bleier-str6" in keys
