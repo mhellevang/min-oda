@@ -72,12 +72,32 @@ def test_top_n_caps_total(lines_many_meieri):
 
 
 def test_foreslatt_antall_scales_with_cycle(lines_many_meieri):
-    """qty = ceil(cycle / median). Med ukentlig kadens og 14-dagers
-    syklus skal forslag være 2 per vare."""
+    """qty = ceil(cycle * snitt_per_besøk / median). Med ukentlig kadens,
+    snitt 1 enhet per besøk og 14-dagers syklus skal forslag være 2 per vare."""
     out = curate(lines_many_meieri, list_cycle_days=14, max_per_category=10)
     assert (out["foreslått_antall"] >= 2).all()
     out7 = curate(lines_many_meieri, list_cycle_days=7, max_per_category=10)
     assert (out7["foreslått_antall"] == 1).all()
+
+
+def test_foreslatt_antall_respects_quantity_per_visit():
+    """En bruker som kjøper 3 melk hver uke skal få 6 melk for 14 dager,
+    ikke 2. Antall-feltet må ta hensyn til hvor mye som faktisk handles
+    per besøk, ikke bare hvor ofte."""
+    rows = []
+    for i, d in enumerate([28, 21, 14, 7]):
+        rows.append({
+            "product_id": 700, "product_name": "TINE Lettmelk 1 L",
+            "category": "Meieri", "order_id": f"o{i}",
+            "date": TODAY - pd.Timedelta(days=d),
+            "quantity": 3, "line_total": 75.0,
+        })
+    out = curate(pd.DataFrame(rows), list_cycle_days=14, max_per_category=10)
+    melk = out[out["key"] == "melk"]
+    assert int(melk["foreslått_antall"].iloc[0]) == 6
+    # Halv syklus → halvt forbruk, fortsatt rundet opp.
+    out7 = curate(pd.DataFrame(rows), list_cycle_days=7, max_per_category=10)
+    assert int(out7[out7["key"] == "melk"]["foreslått_antall"].iloc[0]) == 3
 
 
 def test_category_priority_orders_rows():

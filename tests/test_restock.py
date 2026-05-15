@@ -89,6 +89,52 @@ def test_today_parameter_is_respected(lines_milk_and_bread):
         assert (out["status"] == "forfalt").all()
 
 
+def test_recency_window_biases_to_recent_pattern(today):
+    """Husstand som tidligere kjøpte melk månedlig og nylig har gått over
+    til ukentlig — kadensen skal reflektere det nye ukentlige mønsteret,
+    ikke gjennomsnittet over alle år."""
+    rows = []
+    # 15 historiske månedlige kjøp (qty 1) — fra 600 til 180 dager siden.
+    for i, d in enumerate(range(600, 179, -30)):
+        rows.append({
+            "product_id": 800, "product_name": "TINE Lettmelk 1 L",
+            "category": "Meieri", "order_id": f"old-{i}",
+            "date": today - pd.Timedelta(days=d),
+            "quantity": 1, "line_total": 25.0,
+        })
+    # 23 nylige ukentlige kjøp (qty 3) — fra 154 til 0 dager siden.
+    for i, d in enumerate(range(154, -1, -7)):
+        rows.append({
+            "product_id": 800, "product_name": "TINE Lettmelk 1 L",
+            "category": "Meieri", "order_id": f"new-{i}",
+            "date": today - pd.Timedelta(days=d),
+            "quantity": 3, "line_total": 75.0,
+        })
+    out = compute_cadence(pd.DataFrame(rows), today=today, recency_events=20)
+    melk = out[out["key"] == "melk"].iloc[0]
+    # Nylig mønster: ukentlig, 3 melk hver gang.
+    assert melk["median_days"] == 7
+    assert melk["avg_qty_per_event"] == 3.0
+    # n_buys speiler hele historikken — stabilitet skal ikke svekkes.
+    assert melk["n_buys"] == 15 + 23
+
+
+def test_recency_none_uses_full_history(today):
+    """Med recency_events=None skal kadensen være som før (hele historikken)."""
+    rows = []
+    for i, d in enumerate([28, 21, 14, 7]):
+        rows.append({
+            "product_id": 900, "product_name": "TINE Lettmelk 1 L",
+            "category": "Meieri", "order_id": f"o{i}",
+            "date": today - pd.Timedelta(days=d),
+            "quantity": 2, "line_total": 50.0,
+        })
+    out = compute_cadence(pd.DataFrame(rows), today=today, recency_events=None)
+    melk = out[out["key"] == "melk"].iloc[0]
+    assert melk["median_days"] == 7
+    assert melk["avg_qty_per_event"] == 2.0
+
+
 def test_dropna_handled_internally(lines_milk_and_bread, today):
     """compute_cadence skal kunne ta rader med NaN-er uten å krasje —
     den dropna-er på sine egne preconditions."""

@@ -129,8 +129,18 @@ def curate(
 
     out = cadence.drop(columns=["product_name", "category"]).merge(rep, on="key")
 
-    out["foreslått_antall"] = out["median_days"].apply(
-        lambda m: max(1, math.ceil(list_cycle_days / max(m, 1)))
+    # Antall = forventet forbruk over sykluslengden:
+    #   cycle × (snitt-kvantitet per besøk) / median-intervall.
+    # Treårings-melk-kjøper med median=7 d og snitt 3 melk per ordre får
+    # 6 melk på en 14-dagers liste, ikke 2.
+    out["foreslått_antall"] = out.apply(
+        lambda r: max(
+            1,
+            math.ceil(
+                list_cycle_days * r["avg_qty_per_event"] / max(r["median_days"], 1)
+            ),
+        ),
+        axis=1,
     )
 
     def prio(key: str, cat: str) -> int:

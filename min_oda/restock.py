@@ -49,6 +49,7 @@ def compute_cadence(
     abandon_floor_days: int = 30,
     max_median_days: int = 90,
     by_type: bool = True,
+    recency_events: int | None = 20,
 ) -> pd.DataFrame:
     """Returnerer én rad per produkt (eller varetype) med kadens-statistikk.
 
@@ -63,8 +64,16 @@ def compute_cadence(
     stedet for per product_id, slik at substituerbare varianter teller
     mot samme behov.
 
+    `recency_events` styrer hvor mange nylige hendelser som brukes til
+    å estimere median-intervall og snitt-kvantitet. Stabilitets-sjekkene
+    (n_buys, abandon, max_median) ser fortsatt hele historikken, men
+    prediksjons-tallene vektes mot nyere adferd. Varetyper med færre enn
+    `recency_events` hendelser totalt bruker alt de har. Sett til None
+    for å bruke hele historikken som før.
+
     Kolonner: key, product_name, category, n_buys, first, last,
-    days_since, median_days, cv, due_date, days_until_due, status.
+    days_since, median_days, cv, due_date, days_until_due,
+    avg_qty_per_event, status.
     `key` er enten product_id (default) eller varetype-streng (by_type).
     """
     df = lines.dropna(subset=["product_id", "product_name", "date"]).copy()
@@ -85,13 +94,15 @@ def compute_cadence(
     # En "kjøpshendelse" per ordre — selv om samme produkt har flere linjer
     # eller quantity > 1, regnes det som ett kjøp. Når vi grupperer på
     # type, teller flere ulike produkter av samme type i én ordre også
-    # som ett kjøp av typen.
+    # som ett kjøp av typen. Quantity summeres innen samme ordre så vi
+    # vet hvor mange enheter brukeren faktisk handler per gang.
     events = (
         df.groupby([group_key, "order_id"])
         .agg(
             product_name=("product_name", "last"),
             category=("category", "last"),
             date=("date", "min"),
+            quantity=("quantity", "sum"),
         )
         .reset_index()
         .rename(columns={group_key: "key"})
@@ -104,15 +115,27 @@ def compute_cadence(
         if len(sub) < min_buys:
             continue
         dates = sub["date"].tolist()
-        intervals = [(b - a).days for a, b in zip(dates, dates[1:])]
+        last = dates[-1]
+        days_since = (today - last).days
+
+        # Bruk de nyligste hendelsene til prediksjon (median + qty) når vi
+        # har nok — eldre adferd reflekterer ikke nødvendigvis hva som
+        # forbrukes nå (f.eks. en sommervakanse-pause eller en husstand
+        # som har vokst). Faller tilbake til hele historikken når en
+        # varetype har færre datapunkter enn vinduet.
+        if recency_events is not None and len(sub) > recency_events:
+            recent = sub.tail(recency_events)
+        else:
+            recent = sub
+        recent_dates = recent["date"].tolist()
+        intervals = [(b - a).days for a, b in zip(recent_dates, recent_dates[1:])]
         median = float(pd.Series(intervals).median())
         mean = float(pd.Series(intervals).mean())
         std = float(pd.Series(intervals).std(ddof=0))
         cv = (std / mean) if mean > 0 else float("inf")
-        last = dates[-1]
-        days_since = (today - last).days
         due_date = last + pd.Timedelta(days=int(round(median)))
         days_until_due = (due_date - today).days
+        avg_qty_per_event = float(recent["quantity"].sum()) / len(recent)
 
         # Når vi grupperer på type, viser vi siste-kjøpt-navn som
         # representativt produkt, men `key` forblir typenavnet.
@@ -132,6 +155,7 @@ def compute_cadence(
                 "cv": cv,
                 "due_date": due_date,
                 "days_until_due": days_until_due,
+                "avg_qty_per_event": avg_qty_per_event,
             }
         )
 
