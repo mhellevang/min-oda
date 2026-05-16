@@ -191,38 +191,14 @@ def create_list(client: httpx.Client, title: str, description: str) -> dict | No
     return data
 
 
-_ADD_PRODUCTS_PAYLOAD_SHAPES = [
-    # Etter at vi vet hvilken form Oda faktisk aksepterer, behold bare den
-    # og slett resten. Inntil noen kjører --create og ser hvilken som svarer
-    # 200/201, prøver vi i rekkefølge.
-    ("product_id+quantity", lambda items: [{"product_id": pid, "quantity": q} for pid, q in items]),
-    ("product+quantity",    lambda items: [{"product": pid, "quantity": q} for pid, q in items]),
-    ("product.id+quantity", lambda items: [{"product": {"id": pid}, "quantity": q} for pid, q in items]),
-]
-
-
 def add_products(
     client: httpx.Client, list_id: int, items: list[tuple[int, int]]
 ) -> int:
-    """POST batch av produkter. Returnerer antall vellykkede.
-
-    Oda har ikke dokumentert kontrakten for dette endepunktet, så vi prøver
-    flere payload-former. Når en treffer, logges navnet — pin den i
-    _ADD_PRODUCTS_PAYLOAD_SHAPES og fjern de andre.
-    """
+    """POST batch av produkter. Returnerer antall vellykkede."""
     url = f"https://oda.com/api/v1/product-lists/{list_id}/products/"
-    last_response: httpx.Response | None = None
-    for name, build in _ADD_PRODUCTS_PAYLOAD_SHAPES:
-        r = client.post(url, json=build(items))
-        last_response = r
-        if r.status_code in (200, 201):
-            console.print(f"  [green]✓[/green] payload-form '{name}' virket")
-            return len(items)
-        if r.status_code == 400:
-            console.print(f"  [dim]400 på '{name}' (prøver neste): {r.text[:160]}[/dim]")
-            continue
-        console.print(f"  [red]{r.status_code}[/red] {r.text[:200]}")
-        return 0
-    txt = last_response.text[:200] if last_response is not None else ""
-    console.print(f"  [yellow]400[/yellow] — ingen payload-form virket: {txt}")
+    payload = [{"product_id": pid, "quantity": q} for pid, q in items]
+    r = client.post(url, json=payload)
+    if r.status_code in (200, 201):
+        return len(items)
+    console.print(f"  [red]{r.status_code}[/red] {r.text[:200]}")
     return 0

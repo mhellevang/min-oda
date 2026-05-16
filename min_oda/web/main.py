@@ -251,9 +251,9 @@ def _mode_urls(
     base: dict[str, str | int] = {}
     if cycle != DEFAULT_CYCLE:
         base["cycle"] = cycle
-    if top != 40:
+    if top != DEFAULT_TOP:
         base["top"] = top
-    if max_per_cat != 8:
+    if max_per_cat != DEFAULT_MAX_PER_CAT:
         base["max_per_cat"] = max_per_cat
     if search:
         base["search"] = search
@@ -344,25 +344,6 @@ def _build_rows(
 
 @app.get("/", response_class=RedirectResponse)
 def root() -> RedirectResponse:
-    return RedirectResponse("/handleliste")
-
-
-# Eldre URL-er fra forrige multi-tab-design — bevares som redirects.
-@app.get("/diff", response_class=RedirectResponse)
-def legacy_diff() -> RedirectResponse:
-    return RedirectResponse("/handleliste")
-
-
-@app.get("/restock", response_class=RedirectResponse)
-def legacy_restock() -> RedirectResponse:
-    return RedirectResponse("/handleliste")
-
-
-@app.get("/reload", response_class=RedirectResponse)
-def reload_data() -> RedirectResponse:
-    """Tøm bare in-memory cachene — ikke noen ekstern fetch.
-    For full datarefresh, bruk POST /refresh."""
-    invalidate_caches()
     return RedirectResponse("/handleliste")
 
 

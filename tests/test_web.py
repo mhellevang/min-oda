@@ -38,9 +38,6 @@ def client():
     ("/handleliste/table", 200),
     ("/innsikt", 200),
     ("/innsikt/basket-lookup?q=melk", 200),
-    ("/diff", 307),
-    ("/restock", 307),
-    ("/reload", 307),
 ])
 def test_route_returns_expected_status(client, path, expected):
     r = client.get(path, follow_redirects=False)

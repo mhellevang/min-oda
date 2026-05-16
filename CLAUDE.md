@@ -72,4 +72,4 @@ Everything under `data/` is gitignored except `product_types.json`. Don't commit
 
 ## Talking to Oda
 
-The `POST /api/v1/product-lists/<id>/products/` payload shape is undocumented. `oda_client.add_products()` tries three shapes (`product_id+quantity`, `product+quantity`, `product.id+quantity`) and logs which one works. If you confirm the accepted shape, pin it in `_ADD_PRODUCTS_PAYLOAD_SHAPES` and drop the others.
+`POST /api/v1/product-lists/<id>/products/` aksepterer payload på formen `[{"product_id": <id>, "quantity": <n>}, ...]` (bekreftet ved test mai 2026). Endepunktet er udokumentert, så hvis Oda endrer kontrakten må vi prøve oss frem på nytt.
