@@ -230,8 +230,6 @@ def get_baseline_ids() -> set[int]:
             max_per_category=DEFAULT_MAX_PER_CAT,
             blocked=blocklist.blocked_ids(),
         )
-        if not baseline.empty:
-            baseline = baseline[baseline["days_until_due"] <= DEFAULT_CYCLE]
         _BASELINE_IDS = (
             {int(x) for x in baseline["product_id"]}
             if not baseline.empty
@@ -287,12 +285,6 @@ def _build_rows(
     )
     if ideal.empty:
         return [], 0, 0
-
-    # Skjul varer som ikke forfaller innen syklusen. Forfalt og snart-rader
-    # har negative eller små days_until_due og passerer automatisk; det er
-    # bare 'i rute'-rader med lang vei igjen som faller ut (peanøttsmør
-    # 50 d ute fra en 7-dagers liste).
-    ideal = ideal[ideal["days_until_due"] <= cycle].reset_index(drop=True)
 
     baseline_ids = get_baseline_ids()
 
