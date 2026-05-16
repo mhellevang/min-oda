@@ -219,6 +219,32 @@
 </section>
 {% endif %}
 
+{# ---------- topp produkter etter pengebruk ---------- #}
+{% if top_p_spend %}
+<section>
+  <h2>Topp produkter etter pengebruk — siste 12 måneder</h2>
+  <p class="muted">
+    Samme periode som tabellen over, men sortert på hvor mye kronene faktisk
+    går til. Avslører varer som er dyre per kjøp selv om de ikke kjøpes ofte.
+  </p>
+  <table>
+    <thead>
+      <tr><th>Produkt</th><th class="num">Ganger</th><th></th><th class="num">Sum kr</th></tr>
+    </thead>
+    <tbody>
+      {% for p in top_p_spend %}
+      <tr>
+        <td>{{ p.name }}</td>
+        <td class="num muted">{{ p.ganger }}</td>
+        <td><div class="bar-bg"><div class="bar" style="width: {{ p.bar_pct }}%"></div></div></td>
+        <td class="num">{{ "{:,.0f}".format(p.sum_kr).replace(",", " ") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
 {# ---------- topp kategorier ---------- #}
 {% if top_c %}
 <section>
@@ -290,6 +316,38 @@
     </tbody>
   </table>
 </section>
+
+{# ---------- engangs-kjøp ---------- #}
+{% if one_off %}
+<section>
+  <h2>Engangs-kjøp som ikke kom tilbake</h2>
+  <p class="muted">
+    Produkter kjøpt én eller to ganger, ikke sett siste 90 dager. Ofte
+    eksperimenter du ikke gjentok, eller varer som ble liggende. Baby-
+    og sesongprodukter er filtrert ut.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Produkt</th>
+        <th class="num">Ganger</th>
+        <th class="num">Sist kjøpt</th>
+        <th class="num">Sum kr</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in one_off %}
+      <tr>
+        <td>{{ o.name }}</td>
+        <td class="num muted">{{ o.count }}</td>
+        <td class="num muted">{{ o.last_date.strftime('%d. %b %Y') }}</td>
+        <td class="num">{{ "{:,.0f}".format(o.sum_kr).replace(",", " ") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
 
 {# ---------- basket ---------- #}
 {% if basket_lift or basket_support %}

@@ -114,6 +114,31 @@ def top_products(lines: pd.DataFrame, months: int = 12, n: int = 15) -> list[dic
     ]
 
 
+def top_products_by_spend(lines: pd.DataFrame, months: int = 12, n: int = 15) -> list[dict]:
+    cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=months * 30)
+    recent = lines[lines["date"] >= cutoff]
+    df = (
+        recent.dropna(subset=["product_name"])
+        .groupby("product_name")
+        .agg(ganger=("order_id", "nunique"), sum_kr=("line_total", "sum"))
+        .sort_values("sum_kr", ascending=False)
+        .head(n)
+        .reset_index()
+    )
+    if df.empty:
+        return []
+    max_kr = float(df["sum_kr"].max())
+    return [
+        {
+            "name": str(r["product_name"]),
+            "ganger": int(r["ganger"]),
+            "sum_kr": float(r["sum_kr"]),
+            "bar_pct": int(r["sum_kr"] / max_kr * 100) if max_kr else 0,
+        }
+        for _, r in df.iterrows()
+    ]
+
+
 def top_categories(lines: pd.DataFrame, months: int = 12, n: int = 10) -> list[dict]:
     cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=months * 30)
     recent = lines[lines["date"] >= cutoff]
@@ -364,6 +389,53 @@ def july_gap(orders: pd.DataFrame) -> dict:
         else:
             rows.append({"month": NB_MONTHS[m], "ordrer": 0, "sum_kr": 0})
     return {"rows": rows, "n_years": n_years}
+
+
+# ---------- engangs-kjøp ----------------------------------------------
+
+
+def one_off_purchases(
+    lines: pd.DataFrame, max_buys: int = 2, stale_days: int = 90, n: int = 20
+) -> list[dict]:
+    df = lines.dropna(subset=["product_id", "product_name", "date"])
+    if df.empty:
+        return []
+    cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=stale_days)
+
+    grouped = (
+        df.groupby("product_id")
+        .agg(
+            count=("order_id", "nunique"),
+            last=("date", "max"),
+            sum_kr=("line_total", "sum"),
+            name=("product_name", lambda s: s.mode().iat[0] if not s.mode().empty else s.iat[0]),
+        )
+        .reset_index()
+    )
+    candidates = grouped[(grouped["count"] <= max_buys) & (grouped["last"] <= cutoff)]
+    if candidates.empty:
+        return []
+
+    baby_pat = (
+        r"bleier|stellekluter|våtservietter\s+baby|morsmelk|nan\s+1|nan\s+pro|"
+        r"barnegrøt|tåteflaske"
+    )
+    candidates = candidates[~_kw(candidates["name"], baby_pat)]
+    seasonal_names = {s["name"] for s in seasonal_products(lines, n=500)}
+    candidates = candidates[~candidates["name"].isin(seasonal_names)]
+    if candidates.empty:
+        return []
+
+    candidates = candidates.sort_values("sum_kr", ascending=False).head(n)
+    return [
+        {
+            "name": str(r["name"]),
+            "count": int(r["count"]),
+            "last_date": r["last"],
+            "sum_kr": float(r["sum_kr"]),
+        }
+        for _, r in candidates.iterrows()
+    ]
 
 
 # ---------- basket-analyse --------------------------------------------
