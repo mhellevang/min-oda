@@ -56,6 +56,21 @@ def test_handleliste_renders_filter_output(client):
     assert any(s in body for s in ("om ", "i dag", "siden"))  # format_due filter
 
 
+def test_cycle_filters_rows_by_due_date(client):
+    """Slideren 'Dager listen skal vare' skal også filtrere rader: bare
+    varer som forfaller innen syklusen vises. Med cycle=365 bør vi se
+    minst like mange rader som med cycle=7."""
+
+    def count_rows(html: str) -> int:
+        # Hver rad har en input name="qty_<pid>"
+        return html.count('name="qty_')
+
+    r_short = client.get("/handleliste/table?cycle=7&new_list=true&top=200&max_per_cat=50")
+    r_long = client.get("/handleliste/table?cycle=365&new_list=true&top=200&max_per_cat=50")
+    assert r_short.status_code == r_long.status_code == 200
+    assert count_rows(r_long.text) > count_rows(r_short.text)
+
+
 def test_innsikt_renders_kpis(client):
     """/innsikt skal i det minste vise KPI-strukturen."""
     r = client.get("/innsikt")
