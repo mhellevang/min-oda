@@ -8,7 +8,7 @@ annet merke. Det forhindrer falske mangler ved merkebytte.
 Bruk:
     uv run python -m min_oda.cart_diff                   # forhåndsvisning av mangler
     uv run python -m min_oda.cart_diff --top-up          # ta også med varer med for lavt antall
-    uv run python -m min_oda.cart_diff --cycle 7         # ukentlig syklus (default 14)
+    uv run python -m min_oda.cart_diff --cycle 14        # 14-d syklus (default 7)
     uv run python -m min_oda.cart_diff --create          # opprett liste på oda.com
 """
 
@@ -117,7 +117,7 @@ def show(missing: pd.DataFrame, cycle: int, top_up: bool, cart_count: int) -> No
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--cycle", type=int, default=14,
+    p.add_argument("--cycle", type=int, default=7,
                    help="Listesyklus i dager (samme som build_list)")
     p.add_argument("--top", type=int, default=40,
                    help="Maks antall varetyper i ideell liste")

@@ -9,7 +9,7 @@ Bruk:
     uv run python -m min_oda.build_list                  # forhåndsvisning, oppretter ingenting
     uv run python -m min_oda.build_list --create         # oppretter listen på oda.com
     uv run python -m min_oda.build_list --title "X"      # egendefinert tittel
-    uv run python -m min_oda.build_list --cycle 7        # ukentlig syklus (default 14 d)
+    uv run python -m min_oda.build_list --cycle 14       # 14-d syklus (default 7 d)
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ _TYPE_PRIORITY_OVERRIDE = {
 
 def curate(
     lines: pd.DataFrame,
-    list_cycle_days: int = 14,
+    list_cycle_days: int = 7,
     top_n: int = 40,
     max_per_category: int = 8,
     blocked: set[int] | frozenset[int] = frozenset(),
@@ -204,9 +204,9 @@ def main() -> None:
         "--description",
         default="Faste varer basert på kjøpskadens per varetype",
     )
-    p.add_argument("--cycle", type=int, default=14,
+    p.add_argument("--cycle", type=int, default=7,
                    help="Listesyklus i dager — qty per vare = "
-                        "ceil(syklus / median-intervall)")
+                        "ceil(syklus × snitt-per-besøk / median-intervall)")
     p.add_argument("--top", type=int, default=40, help="Maks antall varetyper")
     p.add_argument("--max-per-category", type=int, default=8,
                    help="Maks antall varetyper per Oda-kategori")

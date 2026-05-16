@@ -74,7 +74,7 @@ _CART: pd.DataFrame | None = None
 _CART_TIME = 0.0
 _CART_TTL = 120.0
 
-DEFAULT_CYCLE = 14
+DEFAULT_CYCLE = 7
 DEFAULT_TOP = 40
 DEFAULT_MAX_PER_CAT = 8
 
@@ -249,7 +249,7 @@ def _mode_urls(
 ) -> tuple[str, str]:
     """Bygg URL-er for modus-bytte som preserverer ikke-default filtre."""
     base: dict[str, str | int] = {}
-    if cycle != 14:
+    if cycle != DEFAULT_CYCLE:
         base["cycle"] = cycle
     if top != 40:
         base["top"] = top
@@ -382,9 +382,9 @@ def refresh(request: Request) -> HTMLResponse:
 @app.get("/handleliste", response_class=HTMLResponse)
 def handleliste(
     request: Request,
-    cycle: int = 14,
-    top: int = 40,
-    max_per_cat: int = 8,
+    cycle: int = DEFAULT_CYCLE,
+    top: int = DEFAULT_TOP,
+    max_per_cat: int = DEFAULT_MAX_PER_CAT,
     search: str = "",
     new_list: bool = False,
     top_up: bool = False,
@@ -417,9 +417,9 @@ def handleliste(
 @app.get("/handleliste/table", response_class=HTMLResponse)
 def handleliste_table(
     request: Request,
-    cycle: int = 14,
-    top: int = 40,
-    max_per_cat: int = 8,
+    cycle: int = DEFAULT_CYCLE,
+    top: int = DEFAULT_TOP,
+    max_per_cat: int = DEFAULT_MAX_PER_CAT,
     search: str = "",
     new_list: bool = False,
     top_up: bool = False,
@@ -451,9 +451,9 @@ async def _render_body_after_block_change(request: Request) -> HTMLResponse:
 
     rows, _, extra_count = _build_rows(
         get_lines(),
-        cycle=_int("cycle", 14),
-        top=_int("top", 40),
-        max_per_cat=_int("max_per_cat", 8),
+        cycle=_int("cycle", DEFAULT_CYCLE),
+        top=_int("top", DEFAULT_TOP),
+        max_per_cat=_int("max_per_cat", DEFAULT_MAX_PER_CAT),
         search=str(form.get("search") or ""),
         new_list=_bool("new_list"),
         top_up=_bool("top_up"),
@@ -498,7 +498,7 @@ async def handleliste_unblock(request: Request) -> HTMLResponse:
 async def handleliste_create(request: Request) -> HTMLResponse:
     form = await request.form()
     new_list = form.get("new_list") == "true"
-    cycle = int(form.get("cycle") or 14)
+    cycle = int(form.get("cycle") or DEFAULT_CYCLE)
     default_title = (
         "Ukehandel — familien" if new_list else "Resterende — ukehandel"
     )
