@@ -10,6 +10,7 @@ Oda-endepunkter vi snakker med:
   GET  /api/v1/orders/                            (paginert) — ordreliste
   GET  /api/v1/orders/<id>/                        — ordredetaljer
   GET  /api/v1/cart/?group-by=categories           — handlekurv
+  POST /api/v1/cart/items/                         — legg varer i kurv (additivt)
   GET  /api/v1/product-lists/                      — egne lister
   POST /api/v1/product-lists/                      — opprett liste
   POST /api/v1/product-lists/<id>/products/        — legg til varer i liste
@@ -202,3 +203,39 @@ def add_products(
         return len(items)
     console.print(f"  [red]{r.status_code}[/red] {r.text[:200]}")
     return 0
+
+
+CART_ITEMS_URL = "https://oda.com/api/v1/cart/items/"
+
+
+def add_to_cart(
+    client: httpx.Client, items: list[tuple[int, int]]
+) -> tuple[dict[int, int], str | None]:
+    """POST batch av produkter rett i handlekurven. Returnerer
+    (kvantum per produkt-id i kurven *etter* POST-en, evt_feilmelding).
+
+    Oda behandler quantity additivt — qty=1 inkrementerer med 1. Vi
+    sender derfor 'mangler' (eller 'foreslått antall'), ikke ønsket
+    totalantall.
+
+    Selve respons-bodyen er hele kurv-objektet — kalleren kan diffe
+    mot et 'før'-snapshot for å oppdage at f.eks. en utsolgt vare ikke
+    faktisk ble lagt til (Oda returnerer 200 også når enkeltvarer
+    droppes stille).
+    """
+    payload = {
+        "items": [{"product_id": pid, "quantity": q} for pid, q in items]
+    }
+    r = client.post(CART_ITEMS_URL, json=payload)
+    if r.status_code not in (200, 201):
+        console.print(f"  [red]{r.status_code}[/red] {r.text[:200]}")
+        return {}, f"{r.status_code}: {r.text[:200]}"
+
+    after: dict[int, int] = {}
+    for group in r.json().get("groups", []):
+        for it in group.get("items", []):
+            pid = (it.get("product") or {}).get("id")
+            if pid is None:
+                continue
+            after[int(pid)] = after.get(int(pid), 0) + int(it.get("quantity") or 0)
+    return after, None

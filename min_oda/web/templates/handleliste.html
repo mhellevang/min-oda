@@ -23,18 +23,19 @@
   Oda til neste gang.
   {% else %}
   Du pleier å handle disse varene, men de ligger ikke i kurven din
-  ({{ cart_total }} varer der nå). Juster antallet og send dem til Oda
-  som en liste du kan legge rett i kurven.
+  ({{ cart_total }} varer der nå). Juster antallet og legg dem rett i
+  handlekurven.
   {% endif %}
 </p>
 
 <form id="main-form"
-      hx-post="/handleliste/create"
+      hx-post="{% if new_list %}/handleliste/create{% else %}/handleliste/add-to-cart{% endif %}"
       hx-target="#result"
       hx-swap="innerHTML">
 
-  {# Modus følger med på POST slik at /create vet hvilken liste som lages.
-     Segmentert kontroll over er anchor-baserte lenker, ikke form-felt. #}
+  {# Skjemaet brukes for to ting: opprette ny handleliste (new_list=true)
+     eller legge mangelvarer rett i kurven (new_list=false). hx-post over
+     dirigerer riktig vei. Selve flagget følger med så server kan filtrere. #}
   <input type="hidden" name="new_list" value="{{ 'true' if new_list else 'false' }}">
 
   <section>
@@ -102,7 +103,7 @@
              aria-label="Listenavn">
       <button type="submit" class="primary">💾 Lagre på Oda</button>
       {% else %}
-      <button type="submit" class="primary">📤 Send til Oda</button>
+      <button type="submit" class="primary">🛒 Legg i handlekurv</button>
       {% endif %}
     </div>
     <div id="result"></div>

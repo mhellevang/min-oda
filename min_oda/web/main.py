@@ -28,7 +28,13 @@ from ..build_list import curate
 from ..cart_diff import compute_diff, fetch_cart
 from ..data_loader import load_both
 from ..fetch_orders import maybe_refresh_data
-from ..oda_client import MissingCredentials, add_products, build_client, create_list
+from ..oda_client import (
+    MissingCredentials,
+    add_products,
+    add_to_cart,
+    build_client,
+    create_list,
+)
 
 from . import innsikt
 
@@ -171,6 +177,14 @@ def invalidate_caches() -> None:
     _CART = None
     _BASELINE_IDS = None
     _BASKET_CACHE = None
+
+
+def invalidate_cart_cache() -> None:
+    """Tving en frisk fetch_cart() ved neste lesing — kalles etter at vi
+    har lagt noe i kurven."""
+    global _CART, _CART_TIME
+    _CART = None
+    _CART_TIME = 0.0
 
 
 def _load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -475,16 +489,9 @@ async def handleliste_unblock(request: Request) -> HTMLResponse:
     return await _render_body_after_block_change(request)
 
 
-@app.post("/handleliste/create", response_class=HTMLResponse)
-async def handleliste_create(request: Request) -> HTMLResponse:
-    form = await request.form()
-    new_list = form.get("new_list") == "true"
-    cycle = int(form.get("cycle") or DEFAULT_CYCLE)
-    default_title = (
-        "Ukehandel — familien" if new_list else "Resterende — ukehandel"
-    )
-    title = form.get("title") or default_title
-
+def _parse_qty_items(form) -> list[tuple[int, int]]:
+    """Plukk ut (product_id, qty)-par fra skjemaet. Hopper over qty<=0
+    og ugyldige felt."""
     items: list[tuple[int, int]] = []
     for k, v in form.items():
         if not k.startswith("qty_"):
@@ -500,19 +507,23 @@ async def handleliste_create(request: Request) -> HTMLResponse:
         except ValueError:
             continue
         items.append((pid, qty))
+    return items
 
+
+@app.post("/handleliste/create", response_class=HTMLResponse)
+async def handleliste_create(request: Request) -> HTMLResponse:
+    form = await request.form()
+    cycle = int(form.get("cycle") or DEFAULT_CYCLE)
+    title = form.get("title") or "Ukehandel — familien"
+
+    items = _parse_qty_items(form)
     if not items:
         return HTMLResponse(
             '<div class="alert warn">Ingen varer å legge til (alle på 0).</div>'
         )
 
     client = build_client()
-    desc = (
-        f"Faste varer · {cycle} d syklus"
-        if new_list
-        else "Diff mellom faste varer og handlekurv"
-    )
-    result = create_list(client, title, desc)
+    result = create_list(client, title, f"Faste varer · {cycle} d syklus")
     if not result:
         return HTMLResponse(
             '<div class="alert error">Kunne ikke opprette listen.</div>'
@@ -523,6 +534,82 @@ async def handleliste_create(request: Request) -> HTMLResponse:
         f'<div class="alert ok">La til {ok}/{len(items)} varer. '
         f'<a href="https://oda.com/no/account/lists/details/{list_id}/" '
         f'target="_blank">Åpne på Oda →</a></div>'
+    )
+
+
+@app.post("/handleliste/add-to-cart", response_class=HTMLResponse)
+async def handleliste_add_to_cart(request: Request) -> HTMLResponse:
+    """Legg de avhukede varene rett i handlekurven på Oda. Antallene
+    behandles additivt av Odas endepunkt, så vi sender 'mangler' direkte.
+
+    Vi snapshotter kurven før POST, sammenligner med kurven Oda
+    returnerer etter, og rapporterer eksplisitt om noen varer ikke
+    gikk fullt gjennom (utsolgt, maks-grense, eller annen stille
+    capping). Tabellen oppdateres ikke automatisk — det er bevisst,
+    så det er lett å sammenholde mot Oda-kurven manuelt."""
+    form = await request.form()
+    items = _parse_qty_items(form)
+    if not items:
+        return HTMLResponse(
+            '<div class="alert warn">Ingen varer å legge til (alle på 0).</div>'
+        )
+
+    try:
+        client = build_client()
+    except MissingCredentials as e:
+        return HTMLResponse(
+            f'<div class="alert error">Mangler innlogging på Oda: {e}</div>'
+        )
+
+    cart_before = get_cart()
+    before: dict[int, int] = {}
+    if not cart_before.empty:
+        for _, r in cart_before.iterrows():
+            pid = int(r["product_id"])
+            before[pid] = before.get(pid, 0) + int(r["quantity"])
+
+    after, err = add_to_cart(client, items)
+    if err:
+        return HTMLResponse(
+            f'<div class="alert error">Kunne ikke legge i kurv: {err}</div>'
+        )
+    invalidate_cart_cache()
+
+    shortfalls: list[tuple[int, int, int]] = []
+    actual_total = 0
+    for pid, requested in items:
+        actual = after.get(pid, 0) - before.get(pid, 0)
+        actual_total += max(actual, 0)
+        if actual < requested:
+            shortfalls.append((pid, requested, max(actual, 0)))
+
+    requested_total = sum(q for _, q in items)
+    cart_url = '<a href="https://oda.com/no/cart/" target="_blank">Åpne kurven →</a>'
+
+    if not shortfalls:
+        vare = "vare" if requested_total == 1 else "varer"
+        return HTMLResponse(
+            f'<div class="alert ok">La {requested_total} {vare} i handlekurven. '
+            f'{cart_url}</div>'
+        )
+
+    lines = get_lines()
+    name_by_pid = (
+        lines.drop_duplicates("product_id")
+        .set_index("product_id")["product_name"]
+        .to_dict()
+    )
+    rows_html = "".join(
+        f"<li>{name_by_pid.get(pid, f'#{pid}')}: "
+        f"ba om {req}, fikk {act}</li>"
+        for pid, req, act in shortfalls
+    )
+    return HTMLResponse(
+        f'<div class="alert warn">'
+        f'La {actual_total} av {requested_total} varer i handlekurven. '
+        f'Disse gikk ikke fullt gjennom (kan være utsolgt eller maks-grense):'
+        f'<ul>{rows_html}</ul>'
+        f'{cart_url}</div>'
     )
 
 
