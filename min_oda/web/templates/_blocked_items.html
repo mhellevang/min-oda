@@ -1,8 +1,8 @@
 {% if blocked_items %}
-<div class="blocked-section">
-  <h3>Skjulte varer ({{ blocked_items|length }})</h3>
-  <p class="muted" style="font-size: 12px; margin: 0 0 10px;">
-    Disse forslagene er midlertidig skjult. Klikk × for å vise dem igjen.
+<details class="blocked-section">
+  <summary>Skjulte varer ({{ blocked_items|length }})</summary>
+  <p class="muted" style="font-size: 12px; margin: 8px 0 10px;">
+    Disse forslagene er skjult fra listen. Klikk × for å vise dem igjen.
   </p>
   <ul class="blocked-chips">
     {% for it in blocked_items %}
@@ -18,5 +18,5 @@
     </li>
     {% endfor %}
   </ul>
-</div>
+</details>
 {% endif %}

@@ -1,0 +1,58 @@
+<tr {% if r.is_extra %}class="is-extra" title="Kommer fram fordi du utvidet et filter"{% endif %}>
+  <td class="muted">{{ r.category }}</td>
+  <td class="nowrap">
+    {{ r.key|capitalize }}
+    {% if r.is_added_variant %}
+    <button type="button" class="remove-variant"
+            onclick="this.closest('tr').remove()"
+            title="Fjern denne varianten fra listen">−</button>
+    {% else %}
+    <button type="button" class="add-variant"
+            hx-post="/handleliste/variant-add"
+            hx-vals='{"key": {{ r.key|tojson }}, "cycle": "{{ cycle }}", "new_list": "{{ 'true' if new_list else 'false' }}"}'
+            hx-include="closest form"
+            hx-target="closest tr" hx-swap="afterend"
+            title="Legg til en annen variant av samme varetype">+</button>
+    {% endif %}
+  </td>
+  <td>
+    {% if r.variants and r.variants|length > 1 %}
+    <select class="product-select"
+            name="product_select_{{ r.product_id }}"
+            hx-post="/handleliste/variant-swap"
+            hx-vals='{"key": {{ r.key|tojson }}, "cycle": "{{ cycle }}", "new_list": "{{ 'true' if new_list else 'false' }}", "is_added_variant": "{{ 'true' if r.is_added_variant else 'false' }}"}'
+            hx-include="this"
+            hx-target="closest tr" hx-swap="outerHTML">
+      {% for v in r.variants %}
+      <option value="{{ v.product_id }}" {% if v.product_id == r.product_id %}selected{% endif %}>{{ v.product_name }}</option>
+      {% endfor %}
+    </select>
+    {% else %}
+    {{ r.product_name }}
+    {% endif %}
+  </td>
+  {% if not new_list %}
+  <td class="num muted">{{ r.forslag }}</td>
+  <td class="num muted">{{ r.i_kurv }}</td>
+  {% endif %}
+  <td class="num nowrap">
+    <input type="number" class="qty" name="qty_{{ r.product_id }}"
+           value="{{ r.qty }}" data-default="{{ r.qty }}"
+           data-pid="{{ r.product_id }}" min="0" step="1">
+    <button type="button" class="reset-qty" data-pid="{{ r.product_id }}"
+            hidden title="Tilbakestill til foreslått antall">↻</button>
+  </td>
+  <td><span class="status status-{{ r.status|status_class }}"
+           title="Trengs {{ r.days_until_due|format_due }} · vanligvis hver {{ r.median }}. d">{{ r.status }}</span></td>
+  {% if new_list %}
+  <td class="muted nowrap" title="{{ r.last_label }}">{{ r.days_since|format_days_ago }}</td>
+  {% endif %}
+  <td>
+    <button type="button" class="hide-btn"
+            hx-post="/handleliste/block"
+            hx-vals='{"product_id": {{ r.product_id|tojson }}, "name": {{ r.product_name|tojson }}}'
+            hx-include="closest form"
+            hx-target="#table-and-blocked" hx-swap="innerHTML"
+            title="Skjul {{ r.product_name }} fra fremtidige forslag (kan vises igjen via Skjulte varer)">×</button>
+  </td>
+</tr>

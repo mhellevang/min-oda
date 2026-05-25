@@ -23,6 +23,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+import math
+
 from .. import blocklist
 from ..build_list import curate
 from ..cart_diff import compute_diff, fetch_cart
@@ -35,6 +37,8 @@ from ..oda_client import (
     build_client,
     create_list,
 )
+from ..restock import compute_cadence
+from ..variants import variants_for_type
 
 from . import innsikt
 
@@ -85,6 +89,8 @@ DEFAULT_TOP = 40
 DEFAULT_MAX_PER_CAT = 8
 
 _BASELINE_IDS: set[int] | None = None
+_CADENCE_BY_TYPE: pd.DataFrame | None = None
+_VARIANT_LIMIT = 10
 
 _REFRESH_STATUS: dict = {
     "refreshed": False,
@@ -171,12 +177,13 @@ def refresh_status_ctx() -> dict:
 
 def invalidate_caches() -> None:
     """Nullstill alle in-memory caches — kalles etter en vellykket refresh."""
-    global _LINES, _ORDERS, _CART, _BASELINE_IDS, _BASKET_CACHE
+    global _LINES, _ORDERS, _CART, _BASELINE_IDS, _BASKET_CACHE, _CADENCE_BY_TYPE
     _LINES = None
     _ORDERS = None
     _CART = None
     _BASELINE_IDS = None
     _BASKET_CACHE = None
+    _CADENCE_BY_TYPE = None
 
 
 def invalidate_cart_cache() -> None:
@@ -232,6 +239,15 @@ def get_basket() -> tuple:
     return _BASKET_CACHE
 
 
+def get_cadence_by_type() -> pd.DataFrame:
+    """Cache compute_cadence(by_type=True) — beregnes én gang per
+    data-reload og brukes av både rad-bygger og variant-endepunktene."""
+    global _CADENCE_BY_TYPE
+    if _CADENCE_BY_TYPE is None:
+        _CADENCE_BY_TYPE = compute_cadence(get_lines(), by_type=True)
+    return _CADENCE_BY_TYPE
+
+
 def get_baseline_ids() -> set[int]:
     """Produkt-id-er som er med ved default-filtre — brukes til å markere
     rader som *kommer til* når brukeren utvider filtrene."""
@@ -284,6 +300,82 @@ def _mode_urls(
     return url_diff, url_new_list
 
 
+def _foreslag_for(cadence_row: pd.Series, cycle: int) -> int:
+    """Samme formel som curate: ceil(cycle × snitt-per-event / median)."""
+    median = max(float(cadence_row["median_days"]), 1.0)
+    return max(1, math.ceil(cycle * float(cadence_row["avg_qty_per_event"]) / median))
+
+
+def _cart_qty_for(cart: pd.DataFrame, pid: int) -> int:
+    """Sum quantity for produkt-id-en i kurven (0 hvis ikke der)."""
+    if cart.empty:
+        return 0
+    sub = cart[cart["product_id"].astype(int) == pid]
+    if sub.empty:
+        return 0
+    return int(sub["quantity"].sum())
+
+
+def _variants_for_row(lines: pd.DataFrame, key: str) -> list[dict]:
+    """Topp varianter for en varetype, formatert for templaten."""
+    df = variants_for_type(lines, key, limit=_VARIANT_LIMIT,
+                           blocked=blocklist.blocked_ids())
+    if df.empty:
+        return []
+    return [
+        {"product_id": int(r["product_id"]), "product_name": str(r["product_name"])}
+        for _, r in df.iterrows()
+    ]
+
+
+def _build_row_dict(
+    cadence_row: pd.Series,
+    pid: int,
+    product_name: str,
+    category: str,
+    cycle: int,
+    new_list: bool,
+    cart: pd.DataFrame | None,
+    baseline_ids: set[int],
+    variants: list[dict],
+    is_added_variant: bool = False,
+) -> dict:
+    """Bygg rad-dict klar for `_list_row.html`, gitt en cadence-rad
+    (typenivå) og en konkret pid + navn. Brukes både av hovedtabellen og
+    av variant-swap/add-endepunktene.
+
+    `is_added_variant=True` markerer rader som brukeren har lagt til via
+    +-knappen — disse får −-knapp i UI for symmetrisk fjerning, og
+    flagget bevares gjennom dropdown-swap."""
+    forslag = _foreslag_for(cadence_row, cycle)
+    if new_list:
+        i_kurv = None
+        mangler = None
+        default_qty = forslag
+    else:
+        i_kurv = _cart_qty_for(cart if cart is not None else _EMPTY_CART, pid)
+        mangler = max(0, forslag - i_kurv)
+        default_qty = mangler
+    return {
+        "product_id": pid,
+        "category": category,
+        "key": str(cadence_row["key"]),
+        "product_name": product_name,
+        "forslag": forslag,
+        "i_kurv": i_kurv,
+        "mangler": mangler,
+        "qty": default_qty,
+        "median": int(round(cadence_row["median_days"])),
+        "status": cadence_row["status"],
+        "days_until_due": int(cadence_row["days_until_due"]),
+        "days_since": int(cadence_row["days_since"]) if pd.notna(cadence_row.get("days_since")) else None,
+        "last_label": _no_short_date(cadence_row["last"]),
+        "is_extra": pid not in baseline_ids,
+        "is_added_variant": is_added_variant,
+        "variants": variants,
+    }
+
+
 def _build_rows(
     lines: pd.DataFrame,
     cycle: int,
@@ -303,6 +395,7 @@ def _build_rows(
     baseline_ids = get_baseline_ids()
 
     cart_total = 0
+    cart: pd.DataFrame | None = None
     if not new_list:
         cart = get_cart()
         cart_total = int(cart["quantity"].sum()) if not cart.empty else 0
@@ -320,40 +413,89 @@ def _build_rows(
     rows: list[dict] = []
     extra_count = 0
     for _, r in ideal.iterrows():
-        forslag = int(r["foreslått_antall"])
-        if new_list:
-            i_kurv = None
-            mangler = None
-            default_qty = forslag
-        else:
-            i_kurv = int(r["i_kurv"])
-            mangler = int(r["mangler"])
-            default_qty = mangler
-
         pid = int(r["product_id"])
-        is_extra = pid not in baseline_ids
-        if is_extra:
-            extra_count += 1
-
-        rows.append(
-            {
-                "product_id": pid,
-                "category": r["category"],
-                "key": str(r["key"]).capitalize(),
-                "product_name": r["product_name"],
-                "forslag": forslag,
-                "i_kurv": i_kurv,
-                "mangler": mangler,
-                "qty": default_qty,
-                "median": int(round(r["median_days"])),
-                "status": r["status"],
-                "days_until_due": int(r["days_until_due"]),
-                "days_since": int(r["days_since"]) if pd.notna(r.get("days_since")) else None,
-                "last_label": _no_short_date(r["last"]),
-                "is_extra": is_extra,
-            }
+        variants = _variants_for_row(lines, str(r["key"]))
+        row = _build_row_dict(
+            cadence_row=r,
+            pid=pid,
+            product_name=str(r["product_name"]),
+            category=str(r["category"]),
+            cycle=cycle,
+            new_list=new_list,
+            cart=cart,
+            baseline_ids=baseline_ids,
+            variants=variants,
         )
+        if row["is_extra"]:
+            extra_count += 1
+        rows.append(row)
     return rows, cart_total, extra_count
+
+
+def _active_pids_from_form(form) -> set[int]:
+    """Plukk ut alle pid-er som har en qty-input på siden — uavhengig av
+    om de står på 0 eller mer. Brukes til å unngå at variant-add
+    dupliserer noe som allerede er der."""
+    pids: set[int] = set()
+    for k in form.keys():
+        if not k.startswith("qty_"):
+            continue
+        try:
+            pids.add(int(k.removeprefix("qty_")))
+        except ValueError:
+            continue
+    return pids
+
+
+def _render_variant_row(
+    request: Request,
+    key: str,
+    pid: int,
+    cycle: int,
+    new_list: bool,
+    is_added_variant: bool,
+) -> HTMLResponse:
+    """Bygg + rendre én _list_row.html for (varetype, pid)-kombinasjonen.
+    Returnerer tom HTML hvis vi ikke finner kadens for typen eller pid-en."""
+    lines = get_lines()
+    cadence = get_cadence_by_type()
+    sub = cadence[cadence["key"] == key]
+    if sub.empty:
+        return HTMLResponse("")
+    cadence_row = sub.iloc[0]
+
+    variants = _variants_for_row(lines, key)
+    # Finn navn + kategori for pid-en. Variant-listen er kuttet til
+    # topp 10, så gå tilbake til lines som fallback.
+    match = next((v for v in variants if v["product_id"] == pid), None)
+    if match:
+        product_name = match["product_name"]
+        cat_row = lines[lines["product_id"].astype(int) == pid].head(1)
+    else:
+        cat_row = lines[lines["product_id"].astype(int) == pid].head(1)
+        if cat_row.empty:
+            return HTMLResponse("")
+        product_name = str(cat_row["product_name"].iloc[0])
+    category = str(cat_row["category"].iloc[0]) if not cat_row.empty else ""
+
+    cart = get_cart() if not new_list else None
+    row = _build_row_dict(
+        cadence_row=cadence_row,
+        pid=pid,
+        product_name=product_name,
+        category=category,
+        cycle=cycle,
+        new_list=new_list,
+        cart=cart,
+        baseline_ids=get_baseline_ids(),
+        variants=variants,
+        is_added_variant=is_added_variant,
+    )
+    return templates.TemplateResponse(
+        request,
+        "_list_row.html",
+        {"r": row, "cycle": cycle, "new_list": new_list},
+    )
 
 
 @app.get("/", response_class=RedirectResponse)
@@ -424,7 +566,7 @@ def handleliste_table(
     )
     return templates.TemplateResponse(
         request, "_list_table.html",
-        {"rows": rows, "new_list": new_list, "extra_count": extra_count},
+        {"rows": rows, "new_list": new_list, "extra_count": extra_count, "cycle": cycle},
     )
 
 
@@ -444,9 +586,10 @@ async def _render_body_after_block_change(request: Request) -> HTMLResponse:
         val = form.get(name)
         return str(val).lower() in {"true", "on", "1"}
 
+    cycle = _int("cycle", DEFAULT_CYCLE)
     rows, _, extra_count = _build_rows(
         get_lines(),
-        cycle=_int("cycle", DEFAULT_CYCLE),
+        cycle=cycle,
         top=_int("top", DEFAULT_TOP),
         max_per_cat=_int("max_per_cat", DEFAULT_MAX_PER_CAT),
         search=str(form.get("search") or ""),
@@ -460,6 +603,7 @@ async def _render_body_after_block_change(request: Request) -> HTMLResponse:
             "rows": rows,
             "extra_count": extra_count,
             "new_list": _bool("new_list"),
+            "cycle": cycle,
             "blocked_items": blocklist.list_blocked(),
         },
     )
@@ -487,6 +631,60 @@ async def handleliste_unblock(request: Request) -> HTMLResponse:
     blocklist.unblock(pid)
     invalidate_blocklist_caches()
     return await _render_body_after_block_change(request)
+
+
+@app.post("/handleliste/variant-swap", response_class=HTMLResponse)
+async def handleliste_variant_swap(request: Request) -> HTMLResponse:
+    """Bytt produkt-variant for en rad. Tar `key`, `cycle`, `new_list` fra
+    formen pluss et `product_select_<oldpid>`-felt der valgt option =
+    ny pid. Bevarer `is_added_variant`-flagget gjennom swap så `−`/`+`-
+    knappen forblir riktig."""
+    form = await request.form()
+    key = str(form.get("key") or "")
+    if not key:
+        return HTMLResponse("", status_code=400)
+    cycle = int(form.get("cycle") or DEFAULT_CYCLE)
+    new_list = str(form.get("new_list") or "").lower() == "true"
+    is_added_variant = str(form.get("is_added_variant") or "").lower() == "true"
+    new_pid: int | None = None
+    for k in form.keys():
+        if k.startswith("product_select_"):
+            try:
+                new_pid = int(str(form.get(k) or ""))
+            except ValueError:
+                pass
+            break
+    if new_pid is None:
+        return HTMLResponse("", status_code=400)
+    return _render_variant_row(request, key, new_pid, cycle, new_list, is_added_variant)
+
+
+@app.post("/handleliste/variant-add", response_class=HTMLResponse)
+async def handleliste_variant_add(request: Request) -> HTMLResponse:
+    """Legg til en ekstra rad med en variant av samme varetype. Velger
+    den mest populære varianten som ikke allerede er aktiv på siden.
+    Den nye raden markeres som `is_added_variant=True` så UI viser en
+    `−`-knapp for å fjerne den igjen."""
+    form = await request.form()
+    key = str(form.get("key") or "")
+    if not key:
+        return HTMLResponse("", status_code=400)
+    cycle = int(form.get("cycle") or DEFAULT_CYCLE)
+    new_list = str(form.get("new_list") or "").lower() == "true"
+
+    active = _active_pids_from_form(form)
+    candidates = _variants_for_row(get_lines(), key)
+    next_pid: int | None = next(
+        (v["product_id"] for v in candidates if v["product_id"] not in active),
+        None,
+    )
+    if next_pid is None:
+        return HTMLResponse(
+            '<tr><td colspan="99" class="muted" style="font-size:12px;'
+            'padding:6px 10px;">Ingen flere varianter å legge til av denne'
+            ' varetypen.</td></tr>'
+        )
+    return _render_variant_row(request, key, next_pid, cycle, new_list, is_added_variant=True)
 
 
 def _parse_qty_items(form) -> list[tuple[int, int]]:

@@ -13,8 +13,6 @@
       <th class="num">Mangler</th>
       {% endif %}
       <th>Forfall</th>
-      <th class="num">Trengs</th>
-      <th class="num">Hvor ofte</th>
       {% if new_list %}
       <th>Sist kjøpt</th>
       {% endif %}
@@ -23,33 +21,7 @@
   </thead>
   <tbody>
     {% for r in rows %}
-    <tr {% if r.is_extra %}class="is-extra" title="Kommer fram fordi du utvidet et filter"{% endif %}>
-      <td class="muted">{{ r.category }}</td>
-      <td>{{ r.key }}</td>
-      <td>{{ r.product_name }}</td>
-      {% if not new_list %}
-      <td class="num muted">{{ r.forslag }}</td>
-      <td class="num muted">{{ r.i_kurv }}</td>
-      {% endif %}
-      <td class="num">
-        <input type="number" class="qty" name="qty_{{ r.product_id }}"
-               value="{{ r.qty }}" min="0" step="1">
-      </td>
-      <td><span class="status status-{{ r.status|status_class }}">{{ r.status }}</span></td>
-      <td class="num muted nowrap">{{ r.days_until_due|format_due }}</td>
-      <td class="num muted nowrap">hver {{ r.median }}. d</td>
-      {% if new_list %}
-      <td class="muted nowrap" title="{{ r.last_label }}">{{ r.days_since|format_days_ago }}</td>
-      {% endif %}
-      <td>
-        <button type="button" class="hide-btn"
-                hx-post="/handleliste/block"
-                hx-vals='{"product_id": {{ r.product_id|tojson }}, "name": {{ r.product_name|tojson }}}'
-                hx-include="closest form"
-                hx-target="#table-and-blocked" hx-swap="innerHTML"
-                title="Skjul {{ r.product_name }} fra forslag (kan vises igjen senere)">×</button>
-      </td>
-    </tr>
+    {% include "_list_row.html" %}
     {% endfor %}
   </tbody>
 </table>
@@ -58,7 +30,7 @@
   {% if extra_count %}
   <span style="color: var(--accent);">{{ extra_count }} kom til fordi du utvidet filtrene</span> ·
   {% endif %}
-  sett antallet til 0 for å hoppe over en vare.
+  sett antall til 0 for å hoppe over.
 </p>
 {% else %}
 <p class="muted">

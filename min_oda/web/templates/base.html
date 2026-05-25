@@ -345,14 +345,28 @@
       padding-top: 16px;
       border-top: 1px dashed var(--rule);
     }
-    .blocked-section h3 {
+    .blocked-section > summary {
       font-size: 12px;
       font-weight: 600;
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      margin: 0 0 4px;
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
     }
+    .blocked-section > summary::-webkit-details-marker { display: none; }
+    .blocked-section > summary::before {
+      content: "▸";
+      display: inline-block;
+      margin-right: 6px;
+      transition: transform 120ms ease;
+      font-size: 10px;
+    }
+    .blocked-section[open] > summary::before {
+      transform: rotate(90deg);
+    }
+    .blocked-section > summary:hover { color: var(--ink); }
     .blocked-chips {
       list-style: none;
       padding: 0;
@@ -391,6 +405,83 @@
       color: var(--warn);
       background: var(--warn-soft);
     }
+    #table-wrap th:last-child, #table-wrap td:last-child {
+      width: 1px;
+      white-space: nowrap;
+    }
+    .reset-qty {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+      width: 18px;
+      margin-left: 4px;
+      font-family: inherit;
+      vertical-align: middle;
+    }
+    .reset-qty:hover { color: var(--accent); }
+    .reset-qty[hidden] {
+      display: inline-block;
+      visibility: hidden;
+    }
+    .add-variant, .remove-variant {
+      background: transparent;
+      border: 1px solid var(--rule);
+      color: var(--muted);
+      cursor: pointer;
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+      margin-left: 4px;
+      font-family: inherit;
+      vertical-align: middle;
+      visibility: hidden;
+    }
+    tr:hover .add-variant,
+    tr:hover .remove-variant { visibility: visible; }
+    .add-variant:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .remove-variant:hover {
+      color: var(--warn);
+      border-color: var(--warn);
+      background: var(--warn-soft);
+    }
+    .product-select {
+      width: 100%;
+      max-width: 280px;
+      padding: 4px 6px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--ink);
+      font-family: inherit;
+      font-size: 14px;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 5l3 3 3-3' fill='none' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+      background-repeat: no-repeat;
+      background-position: right 6px center;
+      padding-right: 22px;
+    }
+    .product-select:hover {
+      border-color: var(--rule);
+      background-color: var(--bg);
+    }
+    .product-select:focus {
+      outline: none;
+      border-color: var(--accent);
+      background-color: var(--card);
+    }
   </style>
 </head>
 <body>
@@ -421,5 +512,61 @@
     {% block content %}{% endblock %}
     <footer>Oda-analyse · personlig</footer>
   </div>
+  <script>
+    (function () {
+      function storeKey(mode, pid) { return `qty:${mode}:${pid}`; }
+
+      function updateResetVisibility(inp) {
+        const btn = inp.parentElement && inp.parentElement.querySelector(
+          `.reset-qty[data-pid="${inp.dataset.pid}"]`
+        );
+        if (!btn) return;
+        btn.hidden = (String(inp.value) === String(inp.dataset.default));
+      }
+
+      function applyStored(root) {
+        root.querySelectorAll('form[data-mode]').forEach(form => {
+          const mode = form.dataset.mode;
+          form.querySelectorAll('input.qty[data-pid]').forEach(inp => {
+            const stored = localStorage.getItem(storeKey(mode, inp.dataset.pid));
+            if (stored !== null) inp.value = stored;
+            updateResetVisibility(inp);
+          });
+        });
+      }
+
+      document.addEventListener('input', (e) => {
+        const inp = e.target;
+        if (!(inp instanceof HTMLInputElement)) return;
+        if (!inp.classList.contains('qty') || !inp.dataset.pid) return;
+        const form = inp.closest('form[data-mode]');
+        if (!form) return;
+        const key = storeKey(form.dataset.mode, inp.dataset.pid);
+        if (String(inp.value) === String(inp.dataset.default)) {
+          localStorage.removeItem(key);
+        } else {
+          localStorage.setItem(key, inp.value);
+        }
+        updateResetVisibility(inp);
+      });
+
+      document.addEventListener('click', (e) => {
+        const btn = e.target.closest && e.target.closest('.reset-qty');
+        if (!btn) return;
+        const td = btn.parentElement;
+        const inp = td && td.querySelector(`input.qty[data-pid="${btn.dataset.pid}"]`);
+        if (!inp) return;
+        const form = inp.closest('form[data-mode]');
+        if (form) {
+          localStorage.removeItem(storeKey(form.dataset.mode, inp.dataset.pid));
+        }
+        inp.value = inp.dataset.default;
+        updateResetVisibility(inp);
+      });
+
+      document.body.addEventListener('htmx:afterSwap', () => applyStored(document));
+      applyStored(document);
+    })();
+  </script>
 </body>
 </html>
