@@ -4,7 +4,7 @@
     {{ r.key|capitalize }}
     {% if r.is_added_variant %}
     <button type="button" class="remove-variant"
-            onclick="this.closest('tr').remove()"
+            onclick="this.closest('tr').remove(); window.minOdaRecount && window.minOdaRecount()"
             title="Fjern denne varianten fra listen">−</button>
     {% else %}
     <button type="button" class="add-variant"
@@ -38,9 +38,15 @@
   <td class="num nowrap">
     <input type="number" class="qty" name="qty_{{ r.product_id }}"
            value="{{ r.qty }}" data-default="{{ r.qty }}"
-           data-pid="{{ r.product_id }}" min="0" step="1">
+           data-pid="{{ r.product_id }}"
+           data-price="{{ '%.2f'|format(r.unit_price) if r.unit_price is not none else '' }}"
+           min="0" step="1">
     <button type="button" class="reset-qty" data-pid="{{ r.product_id }}"
             hidden title="Tilbakestill til foreslått antall">↻</button>
+  </td>
+  <td class="num line-cost"
+      {% if r.unit_price is not none %}title="ca. {{ r.unit_price|format_kr }}/stk · sist betalt"{% endif %}>
+    {% if r.unit_price is not none %}{{ r.line_cost|format_kr }}{% else %}–{% endif %}
   </td>
   <td><span class="status status-{{ r.status|status_class }}"
            title="Trengs {{ r.days_until_due|format_due }} · vanligvis hver {{ r.median }}. d">{{ r.status }}</span></td>

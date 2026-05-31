@@ -169,6 +169,19 @@
     }
     td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     td.nowrap, th.nowrap { white-space: nowrap; }
+    td.line-cost { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    tfoot .total-row td {
+      border-top: 2px solid var(--rule);
+      border-bottom: none;
+      padding-top: 12px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    tfoot .total-row strong {
+      color: var(--ink);
+      font-size: 16px;
+      margin-left: 6px;
+    }
     tr.is-extra td { background: var(--accent-soft); }
     tr.is-extra td:first-child {
       box-shadow: inset 3px 0 0 var(--accent);
@@ -516,6 +529,31 @@
     (function () {
       function storeKey(mode, pid) { return `qty:${mode}:${pid}`; }
 
+      function kr(n) {
+        return Math.round(n).toLocaleString('nb-NO') + ' kr';
+      }
+
+      function recomputeTotals(root) {
+        (root || document).querySelectorAll('form[data-mode]').forEach(form => {
+          let total = 0;
+          form.querySelectorAll('input.qty[data-pid]').forEach(inp => {
+            const tr = inp.closest('tr');
+            const cell = tr && tr.querySelector('.line-cost');
+            const price = parseFloat(inp.dataset.price);
+            if (isNaN(price)) { if (cell) cell.textContent = '–'; return; }
+            const qty = parseInt(inp.value, 10);
+            const sub = Math.round(price * (isNaN(qty) ? 0 : qty));
+            total += sub;
+            if (cell) cell.textContent = kr(sub);
+          });
+          const totalEl = form.querySelector('#list-total');
+          if (totalEl) totalEl.textContent = kr(total);
+        });
+      }
+      // Eksponert så inline onclick på «−»-knappen (fjern variant) kan
+      // oppdatere summen etter at raden er fjernet fra DOM-en.
+      window.minOdaRecount = () => recomputeTotals(document);
+
       function updateResetVisibility(inp) {
         const btn = inp.parentElement && inp.parentElement.querySelector(
           `.reset-qty[data-pid="${inp.dataset.pid}"]`
@@ -548,6 +586,7 @@
           localStorage.setItem(key, inp.value);
         }
         updateResetVisibility(inp);
+        recomputeTotals(document);
       });
 
       document.addEventListener('click', (e) => {
@@ -562,10 +601,15 @@
         }
         inp.value = inp.dataset.default;
         updateResetVisibility(inp);
+        recomputeTotals(document);
       });
 
-      document.body.addEventListener('htmx:afterSwap', () => applyStored(document));
+      document.body.addEventListener('htmx:afterSwap', () => {
+        applyStored(document);
+        recomputeTotals(document);
+      });
       applyStored(document);
+      recomputeTotals(document);
     })();
   </script>
 </body>

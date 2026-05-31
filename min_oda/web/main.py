@@ -30,6 +30,7 @@ from ..build_list import curate
 from ..cart_diff import compute_diff, fetch_cart
 from ..data_loader import load_both
 from ..fetch_orders import maybe_refresh_data
+from ..prices import latest_unit_prices
 from ..oda_client import (
     MissingCredentials,
     add_products,
@@ -72,6 +73,7 @@ def _register_template_globals() -> None:
     templates.env.filters["format_age"] = format_age
     templates.env.filters["format_due"] = format_due
     templates.env.filters["format_days_ago"] = format_days_ago
+    templates.env.filters["format_kr"] = format_kr
     templates.env.filters["status_class"] = status_class
 
 
@@ -90,6 +92,7 @@ DEFAULT_MAX_PER_CAT = 8
 
 _BASELINE_IDS: set[int] | None = None
 _CADENCE_BY_TYPE: pd.DataFrame | None = None
+_PRICE_MAP: dict[int, float] | None = None
 _VARIANT_LIMIT = 10
 
 _REFRESH_STATUS: dict = {
@@ -150,6 +153,15 @@ def status_class(status: str) -> str:
     return _STATUS_CLASS.get(status, "rute")
 
 
+def format_kr(value) -> str:
+    """Jinja-filter: kroner → '1 234 kr' (heltall, mellomrom som tusenskille).
+    Returnerer '–' for manglende pris. Avrunding matcher JS-en som regner
+    totalsummen live."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return "–"
+    return f"{round(float(value)):,d} kr".replace(",", " ")
+
+
 def format_days_ago(days: int | float | None) -> str:
     """Jinja-filter: dager siden et tidspunkt → menneskelig norsk."""
     if days is None:
@@ -178,12 +190,14 @@ def refresh_status_ctx() -> dict:
 def invalidate_caches() -> None:
     """Nullstill alle in-memory caches — kalles etter en vellykket refresh."""
     global _LINES, _ORDERS, _CART, _BASELINE_IDS, _BASKET_CACHE, _CADENCE_BY_TYPE
+    global _PRICE_MAP
     _LINES = None
     _ORDERS = None
     _CART = None
     _BASELINE_IDS = None
     _BASKET_CACHE = None
     _CADENCE_BY_TYPE = None
+    _PRICE_MAP = None
 
 
 def invalidate_cart_cache() -> None:
@@ -246,6 +260,14 @@ def get_cadence_by_type() -> pd.DataFrame:
     if _CADENCE_BY_TYPE is None:
         _CADENCE_BY_TYPE = compute_cadence(get_lines(), by_type=True)
     return _CADENCE_BY_TYPE
+
+
+def get_price_map() -> dict[int, float]:
+    """Cache sist-betalt-pris per produkt — beregnes én gang per data-reload."""
+    global _PRICE_MAP
+    if _PRICE_MAP is None:
+        _PRICE_MAP = latest_unit_prices(get_lines())
+    return _PRICE_MAP
 
 
 def get_baseline_ids() -> set[int]:
@@ -338,6 +360,7 @@ def _build_row_dict(
     cart: pd.DataFrame | None,
     baseline_ids: set[int],
     variants: list[dict],
+    price_map: dict[int, float] | None = None,
     is_added_variant: bool = False,
 ) -> dict:
     """Bygg rad-dict klar for `_list_row.html`, gitt en cadence-rad
@@ -356,8 +379,12 @@ def _build_row_dict(
         i_kurv = _cart_qty_for(cart if cart is not None else _EMPTY_CART, pid)
         mangler = max(0, forslag - i_kurv)
         default_qty = mangler
+    unit_price = (price_map or {}).get(pid)
+    line_cost = unit_price * default_qty if unit_price is not None else None
     return {
         "product_id": pid,
+        "unit_price": unit_price,
+        "line_cost": line_cost,
         "category": category,
         "key": str(cadence_row["key"]),
         "product_name": product_name,
@@ -393,6 +420,7 @@ def _build_rows(
         return [], 0, 0
 
     baseline_ids = get_baseline_ids()
+    price_map = get_price_map()
 
     cart_total = 0
     cart: pd.DataFrame | None = None
@@ -425,11 +453,19 @@ def _build_rows(
             cart=cart,
             baseline_ids=baseline_ids,
             variants=variants,
+            price_map=price_map,
         )
         if row["is_extra"]:
             extra_count += 1
         rows.append(row)
     return rows, cart_total, extra_count
+
+
+def _list_total(rows: list[dict]) -> float:
+    """Sum av radsummene (avrundet per rad, som JS-en) — ca.-total for lista."""
+    return float(
+        sum(round(r["line_cost"]) for r in rows if r.get("unit_price") is not None)
+    )
 
 
 def _active_pids_from_form(form) -> set[int]:
@@ -489,6 +525,7 @@ def _render_variant_row(
         cart=cart,
         baseline_ids=get_baseline_ids(),
         variants=variants,
+        price_map=get_price_map(),
         is_added_variant=is_added_variant,
     )
     return templates.TemplateResponse(
@@ -544,6 +581,7 @@ def handleliste(
             "rows": rows,
             "cart_total": cart_total,
             "extra_count": extra_count,
+            "list_total": _list_total(rows),
             "url_diff": url_diff,
             "url_new_list": url_new_list,
             "blocked_items": blocklist.list_blocked(),
@@ -566,7 +604,8 @@ def handleliste_table(
     )
     return templates.TemplateResponse(
         request, "_list_table.html",
-        {"rows": rows, "new_list": new_list, "extra_count": extra_count, "cycle": cycle},
+        {"rows": rows, "new_list": new_list, "extra_count": extra_count,
+         "cycle": cycle, "list_total": _list_total(rows)},
     )
 
 
@@ -604,6 +643,7 @@ async def _render_body_after_block_change(request: Request) -> HTMLResponse:
             "extra_count": extra_count,
             "new_list": _bool("new_list"),
             "cycle": cycle,
+            "list_total": _list_total(rows),
             "blocked_items": blocklist.list_blocked(),
         },
     )
