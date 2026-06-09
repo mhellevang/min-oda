@@ -75,6 +75,7 @@ def curate(
     top_n: int = 40,
     max_per_category: int = 8,
     blocked: set[int] | frozenset[int] = frozenset(),
+    today: pd.Timestamp | None = None,
 ) -> pd.DataFrame:
     """Bygg handleliste basert på restock-kadens per varetype.
 
@@ -93,8 +94,11 @@ def curate(
     historikken, men en annen variant innen samme varetype kan ta over
     som forslag. Hvis alle varianter i en varetype er blokkert, faller
     varetypen ut av forslagene.
+
+    `today` videresendes til `compute_cadence` slik at tester kan ankre
+    abandon/forfall-tersklene til en fast dato. None betyr nå.
     """
-    cadence = compute_cadence(lines, by_type=True)
+    cadence = compute_cadence(lines, by_type=True, today=today)
     if cadence.empty:
         return cadence
 

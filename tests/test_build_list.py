@@ -51,7 +51,7 @@ def lines_many_meieri() -> pd.DataFrame:
 def test_representative_is_most_distinct_orders(lines_two_brands_of_milk):
     """For varetype "melk" finnes to merker. Det med flest distinkte
     ordrer skal velges som representant, selv om det andre er nyere."""
-    out = curate(lines_two_brands_of_milk)
+    out = curate(lines_two_brands_of_milk, today=TODAY)
     melk = out[out["key"] == "melk"]
     assert len(melk) == 1
     assert "TINE" in str(melk["product_name"].iloc[0])
@@ -60,23 +60,23 @@ def test_representative_is_most_distinct_orders(lines_two_brands_of_milk):
 def test_max_per_category_caps_rows(lines_many_meieri):
     """Med 6 ulike varetyper i Meieri og max_per_category=3, skal vi få
     kun 3 rader."""
-    out = curate(lines_many_meieri, max_per_category=3, top_n=50)
+    out = curate(lines_many_meieri, max_per_category=3, top_n=50, today=TODAY)
     assert len(out) == 3
     assert (out["category"] == "Meieri").all()
 
 
 def test_top_n_caps_total(lines_many_meieri):
     """top_n trumfer per-kategori-grensen for totalt antall rader."""
-    out = curate(lines_many_meieri, max_per_category=10, top_n=2)
+    out = curate(lines_many_meieri, max_per_category=10, top_n=2, today=TODAY)
     assert len(out) == 2
 
 
 def test_foreslatt_antall_scales_with_cycle(lines_many_meieri):
     """qty = ceil(cycle * snitt_per_besøk / median). Med ukentlig kadens,
     snitt 1 enhet per besøk og 14-dagers syklus skal forslag være 2 per vare."""
-    out = curate(lines_many_meieri, list_cycle_days=14, max_per_category=10)
+    out = curate(lines_many_meieri, list_cycle_days=14, max_per_category=10, today=TODAY)
     assert (out["foreslått_antall"] >= 2).all()
-    out7 = curate(lines_many_meieri, list_cycle_days=7, max_per_category=10)
+    out7 = curate(lines_many_meieri, list_cycle_days=7, max_per_category=10, today=TODAY)
     assert (out7["foreslått_antall"] == 1).all()
 
 
@@ -92,11 +92,11 @@ def test_foreslatt_antall_respects_quantity_per_visit():
             "date": TODAY - pd.Timedelta(days=d),
             "quantity": 3, "line_total": 75.0,
         })
-    out = curate(pd.DataFrame(rows), list_cycle_days=14, max_per_category=10)
+    out = curate(pd.DataFrame(rows), list_cycle_days=14, max_per_category=10, today=TODAY)
     melk = out[out["key"] == "melk"]
     assert int(melk["foreslått_antall"].iloc[0]) == 6
     # Halv syklus → halvt forbruk, fortsatt rundet opp.
-    out7 = curate(pd.DataFrame(rows), list_cycle_days=7, max_per_category=10)
+    out7 = curate(pd.DataFrame(rows), list_cycle_days=7, max_per_category=10, today=TODAY)
     assert int(out7[out7["key"] == "melk"]["foreslått_antall"].iloc[0]) == 3
 
 
@@ -110,7 +110,7 @@ def test_category_priority_orders_rows():
     # Snacks: stabilt med navn som hopper på en av snacks-reglene.
     for i, d in enumerate([28, 21, 14, 7]):
         rows.append(_line(301, "Maarud Potetgull Salt", "Snacks", f"sn{i}", d))
-    out = curate(pd.DataFrame(rows), max_per_category=5, top_n=10)
+    out = curate(pd.DataFrame(rows), max_per_category=5, top_n=10, today=TODAY)
     assert out["category"].iloc[0] == "Bleier"
 
 
@@ -127,7 +127,7 @@ def test_baby_type_promoted_over_deal_category():
     # det opp før dem.
     for i, d in enumerate([28, 21, 14, 7]):
         rows.append(_line(402, "Maarud Potetgull Salt", "Snacks", f"sn{i}", d))
-    out = curate(pd.DataFrame(rows), max_per_category=5, top_n=2)
+    out = curate(pd.DataFrame(rows), max_per_category=5, top_n=2, today=TODAY)
     keys = list(out["key"])
     assert "bleier-str3" in keys
     assert "bleier-str6" in keys

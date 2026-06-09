@@ -93,7 +93,7 @@ def test_block_preserves_existing_note(tmp_blocklist):
 def test_curate_keeps_parallel_sizes(lines_two_diaper_sizes):
     """Ulike størrelser av bleier er separate varetyper og skal begge med
     på listen — det er hele poenget med size-suffikset."""
-    out = curate(lines_two_diaper_sizes, max_per_category=5, top_n=10)
+    out = curate(lines_two_diaper_sizes, max_per_category=5, top_n=10, today=TODAY)
     keys = set(out["key"])
     assert "bleier-str5" in keys
     assert "bleier-str6" in keys
@@ -104,6 +104,7 @@ def test_curate_blocking_one_size_keeps_the_other(lines_two_diaper_sizes):
     som sin egen rad."""
     out = curate(
         lines_two_diaper_sizes, max_per_category=5, top_n=10, blocked={500},
+        today=TODAY,
     )
     keys = set(out["key"])
     assert "bleier-str5" not in keys
@@ -115,7 +116,7 @@ def test_curate_substitution_within_size_when_brand_blocked(lines_two_brands_sam
     Blokk av brand A skal la brand B overta som representant — substitusjonen
     overlever på størrelsesnivå."""
     out_unblocked = curate(
-        lines_two_brands_same_size, max_per_category=5, top_n=10,
+        lines_two_brands_same_size, max_per_category=5, top_n=10, today=TODAY,
     )
     bleier = out_unblocked[out_unblocked["key"] == "bleier-str3"]
     assert len(bleier) == 1
@@ -123,6 +124,7 @@ def test_curate_substitution_within_size_when_brand_blocked(lines_two_brands_sam
 
     out_blocked = curate(
         lines_two_brands_same_size, max_per_category=5, top_n=10, blocked={700},
+        today=TODAY,
     )
     bleier = out_blocked[out_blocked["key"] == "bleier-str3"]
     assert len(bleier) == 1
@@ -135,7 +137,7 @@ def test_curate_drops_type_when_all_variants_blocked(lines_two_diaper_sizes):
     blokker man begge størrelsene forsvinner begge."""
     out = curate(
         lines_two_diaper_sizes, max_per_category=5, top_n=10,
-        blocked={500, 600},
+        blocked={500, 600}, today=TODAY,
     )
     keys = set(out["key"])
     assert "bleier-str5" not in keys
@@ -144,7 +146,7 @@ def test_curate_drops_type_when_all_variants_blocked(lines_two_diaper_sizes):
 
 def test_curate_default_blocked_is_empty(lines_two_diaper_sizes):
     """Uten `blocked`-parameter skal curate oppføre seg som før."""
-    out = curate(lines_two_diaper_sizes, max_per_category=5, top_n=10)
+    out = curate(lines_two_diaper_sizes, max_per_category=5, top_n=10, today=TODAY)
     assert not out.empty
     keys = set(out["key"])
     assert "bleier-str5" in keys
