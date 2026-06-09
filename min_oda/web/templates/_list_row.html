@@ -20,7 +20,7 @@
     <select class="product-select"
             name="product_select_{{ r.product_id }}"
             hx-post="/handleliste/variant-swap"
-            hx-vals='{"key": {{ r.key|tojson }}, "cycle": "{{ cycle }}", "new_list": "{{ 'true' if new_list else 'false' }}", "is_added_variant": "{{ 'true' if r.is_added_variant else 'false' }}"}'
+            hx-vals='{"key": {{ r.key|tojson }}, "pid": "{{ r.product_id }}", "cycle": "{{ cycle }}", "new_list": "{{ 'true' if new_list else 'false' }}", "is_added_variant": "{{ 'true' if r.is_added_variant else 'false' }}"}'
             hx-include="this"
             hx-target="closest tr" hx-swap="outerHTML">
       {% for v in r.variants %}

@@ -93,3 +93,45 @@ def test_block_and_unblock_round_trip(client, isolated_blocklist):
 def test_block_invalid_id_returns_400(client, isolated_blocklist):
     r = client.post("/handleliste/block", data={"product_id": "ikke-tall"})
     assert r.status_code == 400
+
+
+def _parse_select(html: str, index: int = 0) -> dict:
+    """Plukk ut produkt-select nr. `index` fra HTML: navn, hx-vals,
+    valgt pid og alle option-pids."""
+    import json
+    import re
+
+    selects = re.findall(r'<select class="product-select".*?</select>', html, re.S)
+    sel = selects[index]
+    options = re.findall(r'<option value="(\d+)"\s*(selected)?\s*>', sel)
+    return {
+        "name": re.search(r'name="(product_select_\d+)"', sel).group(1),
+        "vals": json.loads(re.search(r"hx-vals='(\{.*?\})'", sel).group(1)),
+        "selected": [p for p, s in options if s],
+        "pids": [p for p, _ in options],
+    }
+
+
+def test_variant_swap_uses_row_pid_not_first_select_in_form(client):
+    """htmx legger ved hele skjemaet på POST, så swap-endepunktet må slå
+    opp `product_select_<pid>` for raden som ble endret, ikke ta det
+    første select-feltet i formen (regresjon: dropdownen så ut til å
+    resette seg for alle rader unntatt den første)."""
+    html = client.get("/handleliste?new_list=true").text
+    first = _parse_select(html, 0)
+    second = _parse_select(html, 1)
+    new_pid = next(p for p in second["pids"] if p not in second["selected"])
+
+    r = client.post(
+        "/handleliste/variant-swap",
+        data={
+            **second["vals"],
+            # Første rads select kommer foran i form-serialiseringen.
+            first["name"]: first["selected"][0],
+            second["name"]: new_pid,
+        },
+    )
+    assert r.status_code == 200
+    swapped = _parse_select(r.text)
+    assert swapped["selected"] == [new_pid]
+    assert swapped["vals"]["pid"] == new_pid

@@ -675,26 +675,24 @@ async def handleliste_unblock(request: Request) -> HTMLResponse:
 
 @app.post("/handleliste/variant-swap", response_class=HTMLResponse)
 async def handleliste_variant_swap(request: Request) -> HTMLResponse:
-    """Bytt produkt-variant for en rad. Tar `key`, `cycle`, `new_list` fra
-    formen pluss et `product_select_<oldpid>`-felt der valgt option =
-    ny pid. Bevarer `is_added_variant`-flagget gjennom swap så `−`/`+`-
-    knappen forblir riktig."""
+    """Bytt produkt-variant for en rad. Tar `key`, `pid` (radens gamle
+    pid), `cycle` og `new_list` fra formen; valgt option ligger i
+    `product_select_<pid>`. Oppslaget må gå via `pid`, ikke første
+    `product_select_`-felt i formen: htmx legger ved hele det omsluttende
+    skjemaet på POST, så alle radenes selects følger med. Bevarer
+    `is_added_variant`-flagget gjennom swap så `−`/`+`-knappen forblir
+    riktig."""
     form = await request.form()
     key = str(form.get("key") or "")
-    if not key:
+    old_pid = str(form.get("pid") or "")
+    if not key or not old_pid:
         return HTMLResponse("", status_code=400)
     cycle = int(form.get("cycle") or DEFAULT_CYCLE)
     new_list = str(form.get("new_list") or "").lower() == "true"
     is_added_variant = str(form.get("is_added_variant") or "").lower() == "true"
-    new_pid: int | None = None
-    for k in form.keys():
-        if k.startswith("product_select_"):
-            try:
-                new_pid = int(str(form.get(k) or ""))
-            except ValueError:
-                pass
-            break
-    if new_pid is None:
+    try:
+        new_pid = int(str(form.get(f"product_select_{old_pid}") or ""))
+    except ValueError:
         return HTMLResponse("", status_code=400)
     return _render_variant_row(request, key, new_pid, cycle, new_list, is_added_variant)
 
