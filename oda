@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 
 PID_FILE="data/.oda.pid"
 LOG_FILE="data/oda.log"
-PORT="${ODA_PORT:-8000}"
+PORT="${ODA_PORT:-8042}"
 
 is_running() {
   [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
@@ -20,6 +20,18 @@ start() {
   uv run min-oda --port "$PORT" --no-reload "$@" >"$LOG_FILE" 2>&1 &
   echo $! >"$PID_FILE"
   echo "Startet på http://localhost:$PORT (pid $!). Logg: $LOG_FILE"
+  open_when_ready &
+}
+
+open_when_ready() {
+  local url="http://localhost:$PORT/handleliste"
+  for _ in $(seq 1 60); do
+    if curl -s -o /dev/null "$url"; then
+      open "$url"
+      return
+    fi
+    sleep 1
+  done
 }
 
 stop() {
