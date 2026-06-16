@@ -12,9 +12,10 @@ def test_keyword_basic():
 
 
 def test_specific_rule_wins_over_general():
-    """Gresk yoghurt skal klassifiseres som yoghurt-gresk, ikke yoghurt.
-    Regelen står over den generelle i _KEYWORD_RULES."""
-    assert product_type("TINE Gresk Yoghurt Naturell", "Meieri") == "yoghurt-gresk"
+    """Gresk/tyrkisk yoghurt skal klassifiseres som yoghurt-gresk-tyrkisk,
+    ikke yoghurt. Regelen står over den generelle i _KEYWORD_RULES."""
+    assert product_type("TINE Gresk Yoghurt Naturell", "Meieri") == "yoghurt-gresk-tyrkisk"
+    assert product_type("Salakis Yoghurt Tyrkisk Naturell 10%", "Meieri") == "yoghurt-gresk-tyrkisk"
     assert product_type("Junior Yoghurt Banan", "Yoghurt") == "yoghurt-junior"
     # Vanlig yoghurt fortsatt yoghurt.
     assert product_type("TINE Yoghurt Skogsbær", "Meieri") == "yoghurt"
