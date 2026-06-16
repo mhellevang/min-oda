@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+PID_FILE="data/.oda.pid"
+LOG_FILE="data/oda.log"
+PORT="${ODA_PORT:-8000}"
+
+is_running() {
+  [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
+}
+
+start() {
+  if is_running; then
+    echo "Kjører allerede (pid $(cat "$PID_FILE"))."
+    return
+  fi
+  mkdir -p data
+  uv run min-oda --port "$PORT" --no-reload "$@" >"$LOG_FILE" 2>&1 &
+  echo $! >"$PID_FILE"
+  echo "Startet på http://localhost:$PORT (pid $!). Logg: $LOG_FILE"
+}
+
+stop() {
+  if ! is_running; then
+    echo "Kjører ikke."
+    rm -f "$PID_FILE"
+    return
+  fi
+  kill "$(cat "$PID_FILE")"
+  rm -f "$PID_FILE"
+  echo "Stoppet."
+}
+
+case "${1:-}" in
+  start)   shift; start "$@" ;;
+  stop)    stop ;;
+  restart) stop; sleep 1; shift || true; start "$@" ;;
+  status)
+    if is_running; then echo "Kjører (pid $(cat "$PID_FILE")) på port $PORT."
+    else echo "Kjører ikke."; fi
+    ;;
+  logs)    tail -f "$LOG_FILE" ;;
+  *)
+    echo "Bruk: ./oda {start|stop|restart|status|logs}"
+    exit 1
+    ;;
+esac
