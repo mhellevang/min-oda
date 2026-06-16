@@ -21,6 +21,7 @@ from urllib.parse import urlencode
 import pandas as pd
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import math
@@ -64,6 +65,13 @@ app = FastAPI(title="Min Oda", lifespan=lifespan)
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+# htmx serveres lokalt (ikke fra CDN) så appen funker offline.
+app.mount(
+    "/static",
+    StaticFiles(directory=str(Path(__file__).parent / "static")),
+    name="static",
+)
 
 
 def _register_template_globals() -> None:
