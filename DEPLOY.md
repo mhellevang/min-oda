@@ -1,7 +1,7 @@
 # Deploy på TrueNAS (Dockge + Cloudflare + auto-oppdatering)
 
 Kjør min-oda som en Dockge-stack på TrueNAS, med Cloudflare Tunnel foran så
-den er tilgjengelig utenfra uten å åpne porter, Cloudflare Access så bare du
+den er tilgjengelig utenfra uten å åpne porter, et app-passord så bare du
 (og kona) kommer inn, og Watchtower så en `git push` deployer seg selv.
 
 Tre containere i én stack (`docker-compose.truenas.yml`):
@@ -19,8 +19,9 @@ GHCR → Watchtower henter det ned og recreater containeren. Helt hands-off.
 ## Forutsetninger
 
 - Et domene lagt til i Cloudflare (gratis-plan holder).
-- Cloudflare Zero Trust aktivert på kontoen (gratis for opptil 50 brukere):
-  <https://one.dash.cloudflare.com>.
+- Tilgang til å opprette en Cloudflare Tunnel (Cloudflare One / Networks ->
+  Tunnels). Ingen Zero Trust Access nødvendig — tilgangskontrollen er app-
+  passordet (steg 5).
 - TrueNAS SCALE med Dockge (samme oppsett som de andre appene dine).
 
 ## 1. Gjør GHCR-imaget hentbart
@@ -51,6 +52,11 @@ ODA_PASSWORD=ditt-oda-passord
 
 # Cloudflare Tunnel (fylles inn i steg 3)
 CLOUDFLARE_TUNNEL_TOKEN=
+
+# App-passord foran hele appen (delt passord for deg + kona)
+APP_PASSWORD=et-langt-delt-passord
+SESSION_SECRET=en-annen-lang-tilfeldig-streng
+COOKIE_SECURE=true
 ```
 
 Se `.env.example` for alle tilgjengelige variabler. `.env` blir aldri en del
@@ -85,20 +91,22 @@ appen og slår opp containernavnet internt. Appen selv publiserer ingen porter.
 
 ## 5. Lås tilgangen til deg og kona
 
-Zero Trust -> **Access** -> **Applications** -> **Add an application** ->
-**Self-hosted**:
+Cloudflare Access krever Zero Trust, som ikke er tilgjengelig på en ren
+gratis-konto uten egen onboarding. I stedet ligger tilgangskontrollen i appen
+selv: et delt passord (`APP_PASSWORD`) foran hele appen, satt i `.env` (steg 2).
 
-1. **Application domain**: samme hostname som i steg 4 (`oda.dittdomene.no`).
-2. Under **Policies**, lag én policy:
-   - **Action**: `Allow`
-   - **Include** -> **Emails**: legg til din og konas e-postadresse.
-3. Standard innlogging er engangskode på e-post (**One-time PIN**). Vil dere
-   heller logge inn med Google, legg til Google som identity provider under
-   **Settings** -> **Authentication** og velg den.
+Slik virker det:
 
-Nå må enhver som åpner `oda.dittdomene.no` logge inn og matche en av de to
-e-postadressene før de i det hele tatt når appen. Appen har ingen egen
-brukerhåndtering, Access er hele adgangskontrollen.
+- Er `APP_PASSWORD` satt, må enhver logge inn på `/login` før de når noe som
+  helst. Innlogging gir en signert HMAC-cookie (30 dagers levetid).
+- `SESSION_SECRET` signerer cookien (kan være hva som helst langt og tilfeldig).
+- `COOKIE_SECURE=true` gjør at cookien kun sendes over HTTPS (som er tilfellet
+  bak Cloudflare Tunnel).
+- Er `APP_PASSWORD` tomt, er auth av og alt er åpent (greit lokalt).
+
+Samme modell som avisa. Vil du senere ha ekte SSO/e-postbasert Access i stedet,
+kan du aktivere Zero Trust og legge en Access-applikasjon foran hostnamet, men
+app-passordet er tilstrekkelig for et par brukere.
 
 ## 6. Deploy i Dockge
 

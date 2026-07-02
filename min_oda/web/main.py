@@ -16,16 +16,17 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from time import time
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import pandas as pd
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import math
 
+from . import auth
 from .. import blocklist
 from ..build_list import curate
 from ..cart_diff import compute_diff, fetch_cart
@@ -66,6 +67,68 @@ app = FastAPI(title="Min Oda", lifespan=lifespan)
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+# Alt bak et app-passord (APP_PASSWORD). /login, /logout og statiske filer er
+# alltid åpne; er passordet tomt er auth av (lokalt / bak VPN).
+_OPEN_PREFIXES = ("/login", "/logout", "/static")
+
+
+@app.middleware("http")
+async def guard(request: Request, call_next):
+    path = request.url.path
+    is_open = any(path == p or path.startswith(p + "/") for p in _OPEN_PREFIXES)
+    if not is_open and not auth.is_authed(request):
+        target = f"/login?next={quote(path)}"
+        # HTMX-fragmenter: la htmx gjøre en full redirect i stedet for å
+        # bytte inn login-siden i et fragment.
+        if request.headers.get("HX-Request") == "true":
+            resp = Response(status_code=401)
+            resp.headers["HX-Redirect"] = target
+            return resp
+        return RedirectResponse(url=target, status_code=303)
+    return await call_next(request)
+
+
+def _safe_next(next_url: str) -> str:
+    """Kun relative samme-side-stier, ellers blir /login?next=… en åpen
+    redirect (phishing)."""
+    if next_url.startswith("/") and not next_url.startswith("//"):
+        return next_url
+    return "/handleliste"
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_form(request: Request, next: str = "/handleliste", error: int = 0):
+    next = _safe_next(next)
+    if not auth.auth_enabled() or auth.is_authed(request):
+        return RedirectResponse(url=next, status_code=303)
+    return templates.TemplateResponse(
+        request, "login.html", {"next": next, "error": bool(error)}
+    )
+
+
+@app.post("/login")
+def login_submit(password: str = Form(...), next: str = Form("/handleliste")):
+    next = _safe_next(next)
+    if auth.check_password(password):
+        resp = RedirectResponse(url=next, status_code=303)
+        resp.set_cookie(
+            auth.COOKIE_NAME,
+            auth.make_token(),
+            httponly=True,
+            samesite="lax",
+            secure=auth.cookie_secure(),
+            max_age=60 * 60 * 24 * 30,
+        )
+        return resp
+    return RedirectResponse(url=f"/login?error=1&next={quote(next)}", status_code=303)
+
+
+@app.post("/logout")
+def logout():
+    resp = RedirectResponse(url="/login", status_code=303)
+    resp.delete_cookie(auth.COOKIE_NAME)
+    return resp
+
 # htmx serveres lokalt (ikke fra CDN) så appen funker offline.
 app.mount(
     "/static",
@@ -78,6 +141,7 @@ def _register_template_globals() -> None:
     """Eksponer refresh_status() og format-filtre til alle templates uten
     å måtte legge det inn manuelt i hver TemplateResponse."""
     templates.env.globals["refresh_status"] = refresh_status_ctx
+    templates.env.globals["auth_enabled"] = auth.auth_enabled
     templates.env.filters["format_age"] = format_age
     templates.env.filters["format_due"] = format_due
     templates.env.filters["format_days_ago"] = format_days_ago

@@ -505,6 +505,11 @@
       <div id="refresh-status" class="refresh-status">
         {% include "_refresh_status.html" %}
       </div>
+      {% if auth_enabled() %}
+      <form method="post" action="/logout" style="margin:0 0 0 12px;">
+        <button type="submit" style="background:none;border:0;color:var(--muted);font-size:12px;cursor:pointer;padding:0;">Logg ut</button>
+      </form>
+      {% endif %}
     </nav>
     {% set rs = refresh_status() %}
     {% if rs.error %}
