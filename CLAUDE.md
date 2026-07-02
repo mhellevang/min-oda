@@ -73,3 +73,11 @@ Everything under `data/` is gitignored except `product_types.json`. Don't commit
 ## Talking to Oda
 
 `POST /api/v1/product-lists/<id>/products/` aksepterer payload på formen `[{"product_id": <id>, "quantity": <n>}, ...]` (bekreftet ved test mai 2026). Endepunktet er udokumentert, så hvis Oda endrer kontrakten må vi prøve oss frem på nytt.
+
+Passord-login (`auth.login_with_password`): hent `csrftoken`-cookie fra `GET https://oda.com/no/user/login/`, så `POST /api/v1/user/login/` med JSON `{"username", "password"}` og header `X-CSRFToken` + `Referer`. Suksess = HTTP 200 (Django roterer sessionid ved innlogging); feil = HTTP 400 med `{"errors": {"__all__": [...]}}`. Merk at Oda setter en anonym `sessionid` også ved feil, så suksess må avgjøres på status, ikke på cookie-tilstedeværelse. Ingen captcha per juli 2026. Sesjonen buffres i `data/session.json`.
+
+## Server-deploy
+
+To compose-filer: `docker-compose.yml` (lokal dev, `build: .` + tagger som GHCR-imaget) og `docker-compose.truenas.yml` (prod: henter ferdig image fra GHCR, + `cloudflared` + `watchtower`). `docker-entrypoint.sh` sår `data/product_types.json` inn i et tomt volum. Passord-login er auth-kilden i denne modusen (ingen nettleser for rookiepy).
+
+Autodeploy (samme mønster som avisa): `.github/workflows/build.yml` bygger og pusher `ghcr.io/mhellevang/min-oda:latest` ved push til `main` (PR-er bygger uten push). NAS-en sitter bak NAT, så `watchtower` poller GHCR hvert 5. min og recreater containeren når `:latest` endres. Ingen app-hemmeligheter i CI, ingen SSH-deploy. Full guide i `DEPLOY.md`.

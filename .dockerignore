@@ -1,0 +1,28 @@
+# Hold imaget lite og fritt for hemmeligheter.
+.git
+.github
+.venv
+.uv-cache
+__pycache__
+*.pyc
+.pytest_cache
+.ipynb_checkpoints
+
+# Trengs ikke i imaget (og hindrer at lokale bygg tagges likt som CI-pushen).
+docker-compose*.yml
+DEPLOY.md
+tests
+
+# Aldri bak inn credentials eller lokale data.
+.env
+.env.*
+!.env.example
+
+# Alt i data/ utenom default-mappingen bygges opp i runtime.
+data/*
+!data/product_types.json
+
+plots/
+*.html
+!min_oda/web/templates/*.html
+.DS_Store

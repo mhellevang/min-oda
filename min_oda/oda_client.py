@@ -49,6 +49,11 @@ def auth_error_hint() -> str:
     hvilken auth-kilde vi sist brukte. Brukes av CLI-feilmeldinger og
     av web-bannerets refresh-status."""
     src = last_auth_source()
+    if src.startswith("passord"):
+        return (
+            "Innloggingen mot Oda gikk ikke gjennom. Sjekk ODA_USERNAME/ODA_PASSWORD, "
+            "eller om Oda krever ny bekreftelse (captcha/2FA) for kontoen."
+        )
     if src == ".env":
         return "Cookien i .env er utløpt. Logg inn på oda.com og oppdater verdiene."
     if src == "ukjent":
@@ -56,20 +61,57 @@ def auth_error_hint() -> str:
     return f"Cookien fra {src} er utløpt. Logg inn på oda.com igjen i {src}."
 
 
-def build_client() -> httpx.Client:
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:128.0) "
+    "Gecko/20100101 Firefox/128.0"
+)
+
+
+def password_auth_configured() -> bool:
+    """True hvis ODA_USERNAME + ODA_PASSWORD er satt. Brukes til å avgjøre om
+    en mislykket henting skal prøve ny innlogging med tvunget re-login."""
+    load_dotenv()
+    return bool(
+        os.environ.get("ODA_USERNAME", "").strip()
+        and os.environ.get("ODA_PASSWORD", "").strip()
+    )
+
+
+def build_client(force_login: bool = False) -> httpx.Client:
+    """Bygg en autentisert httpx-klient mot Oda.
+
+    Kilde-rekkefølge:
+      1. Manuell cookie i .env (ODA_COOKIE / ODA_SESSIONID).
+      2. Passord-login (ODA_USERNAME + ODA_PASSWORD), sesjon buffres til disk.
+      3. Cookies fra en innlogget nettleser (rookiepy).
+
+    force_login=True hopper over sesjonsbufferet og logger inn på nytt — brukes
+    når en henting feilet fordi den bufrede sesjonen kan ha utløpt før tiden.
+    """
     global _LAST_AUTH_SOURCE
     load_dotenv()
 
     cookie_header = os.environ.get("ODA_COOKIE", "").strip()
     sessionid = os.environ.get("ODA_SESSIONID", "").strip()
     csrftoken = os.environ.get("ODA_CSRFTOKEN", "").strip()
-    user_agent = os.environ.get(
-        "ODA_USER_AGENT",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:128.0) Gecko/20100101 Firefox/128.0",
-    )
+    user_agent = os.environ.get("ODA_USER_AGENT", DEFAULT_USER_AGENT)
+    username = os.environ.get("ODA_USERNAME", "").strip()
+    password = os.environ.get("ODA_PASSWORD", "").strip()
 
     if cookie_header or sessionid:
         _LAST_AUTH_SOURCE = ".env"
+    elif username and password:
+        from .auth import LoginFailed, get_session
+
+        try:
+            session, from_cache = get_session(
+                username, password, user_agent, force=force_login
+            )
+        except LoginFailed as e:
+            raise MissingCredentials(f"Innlogging mot Oda feilet: {e}") from e
+        sessionid = session["sessionid"]
+        csrftoken = session.get("csrftoken", "")
+        _LAST_AUTH_SOURCE = "passord (bufret)" if from_cache else "passord"
     else:
         from .auth import load_browser_cookies
 
@@ -79,7 +121,8 @@ def build_client() -> httpx.Client:
             hint = f" (prøvde '{preferred}')" if preferred else ""
             raise MissingCredentials(
                 f"Fant ingen Oda-cookies{hint}. Logg inn på oda.com i "
-                "Firefox/Chrome/Safari/Edge/Brave, eller sett ODA_SESSIONID i .env."
+                "Firefox/Chrome/Safari/Edge/Brave, sett ODA_USERNAME/ODA_PASSWORD, "
+                "eller sett ODA_SESSIONID i .env."
             )
         cookies_dict, browser_name = loaded
         sessionid = cookies_dict.get("sessionid", "")

@@ -26,6 +26,7 @@ from .oda_client import (
     build_client,
     console,
     fetch_with_pagination,
+    password_auth_configured,
     try_get,
 )
 
@@ -215,7 +216,24 @@ def maybe_refresh_data(force: bool = False, max_age_hours: float = 24.0) -> dict
     try:
         fetch_all(client)
     except Exception as e:
-        return {"refreshed": False, "data_age_hours": current_age(), "error": str(e)}
+        # En bufret passord-sesjon kan ha utløpt før antatt levetid. Slett
+        # bufferet og prøv én gang til med tvunget ny innlogging.
+        if password_auth_configured():
+            from .auth import clear_cached_session
+
+            console.print("[yellow]Henting feilet — prøver ny innlogging mot Oda.[/yellow]")
+            clear_cached_session()
+            try:
+                client = build_client(force_login=True)
+                fetch_all(client)
+            except Exception as e2:
+                return {
+                    "refreshed": False,
+                    "data_age_hours": current_age(),
+                    "error": str(e2),
+                }
+        else:
+            return {"refreshed": False, "data_age_hours": current_age(), "error": str(e)}
 
     try:
         build_csvs()

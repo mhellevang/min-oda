@@ -32,6 +32,20 @@ etc.), kopier `.env.example` til `.env` og lim inn `sessionid` og
 `https://oda.com`). Når `.env` har verdier, brukes de fremfor
 nettleser-cookies.
 
+### Innlogging med brukernavn og passord
+
+På en server uten innlogget nettleser (f.eks. NAS) kan appen logge inn
+mot Oda selv. Sett `ODA_USERNAME` og `ODA_PASSWORD` i `.env`, så henter
+den en sesjon og buffrer den i `data/session.json` (fornyes automatisk
+når den utløper). Kilde-rekkefølge: manuell cookie → passord → nettleser.
+
+Dette er bevisst litt skjørt: login-endepunktet er udokumentert, og hvis
+Oda innfører captcha eller 2FA feiler det (synlig i loggen). Da faller du
+tilbake på manuell cookie i `.env`.
+
+For å kjøre hele greia på TrueNAS via Dockge, med Cloudflare Tunnel og
+tilgangsstyring foran, se [DEPLOY.md](DEPLOY.md).
+
 ## Start
 
 ```sh

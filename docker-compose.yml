@@ -1,0 +1,16 @@
+# Lokal dev/kjøring. Bygger fra Dockerfile og tagger som GHCR-imaget, så du
+# kan teste akkurat det CI bygger og pusher. For server-deploy på TrueNAS, se
+# docker-compose.truenas.yml (henter ferdig image fra GHCR, ingen bygg der).
+
+services:
+  min-oda:
+    image: ghcr.io/mhellevang/min-oda:latest
+    build: .
+    container_name: min-oda
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8042:8000"
+    volumes:
+      # Bruk den lokale data-katalogen direkte (CSV, ordre-JSON, blocklist).
+      - ./data:/app/data

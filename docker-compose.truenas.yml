@@ -1,0 +1,49 @@
+# Server-deploy på TrueNAS SCALE via Cloudflare Tunnel, med auto-oppdatering.
+#
+# Ingen reverse proxy, ingen åpne porter, ingen Let's Encrypt: Cloudflare Tunnel
+# terminerer TLS på Cloudflares edge og videresender trafikken til appen over
+# det interne compose-nettet. Hjemme-IP-en eksponeres aldri.
+#
+# Egen frittstående stack (bygger IKKE på docker-compose.yml). Lim den inn som
+# en stack i Dockge, eller kjør `docker compose -f docker-compose.truenas.yml
+# up -d`. Ingen git-klone trengs på NAS-en, imaget hentes fra GHCR. Se DEPLOY.md.
+#
+# Appen henter sin egen ordrehistorikk fra Oda og bygger den opp på nytt om den
+# forsvinner. Det som er verdt å ta vare på i volumet er blocklist og den
+# bufrede Oda-sesjonen, et vanlig navngitt volum holder.
+
+services:
+  min-oda:
+    image: ghcr.io/mhellevang/min-oda:latest
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - min-oda-data:/app/data
+    # La Watchtower auto-oppdatere denne containeren når :latest endres i GHCR.
+    # Scoped med label så Watchtower kun rører denne stacken.
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+    # Ingen porter publiseres, cloudflared når appen internt på http://min-oda:8000.
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - min-oda
+
+  # Poller GHCR og recreater min-oda når ghcr.io/mhellevang/min-oda:latest
+  # endres, så en `git push origin main` (som CI bygger + pusher) når NAT-boksen
+  # helt av seg selv.
+  watchtower:
+    image: containrrr/watchtower:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_LABEL_ENABLE: "true"   # kun oppdater merkede containere
+      WATCHTOWER_CLEANUP: "true"        # rydd bort gamle images etter oppdatering
+    command: --interval 300             # poll hvert 5. minutt
+
+volumes:
+  min-oda-data:
