@@ -21,7 +21,7 @@ import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
-from .blocklist import blocked_ids
+from .blocklist import blocked_ids, blocked_types
 from .data_loader import load_both
 from .oda_client import LIST_URL, add_products, build_client, create_list
 from .product_types import product_type
@@ -75,6 +75,7 @@ def curate(
     top_n: int = 40,
     max_per_category: int = 8,
     blocked: set[int] | frozenset[int] = frozenset(),
+    blocked_types: set[str] | frozenset[str] = frozenset(),
     today: pd.Timestamp | None = None,
 ) -> pd.DataFrame:
     """Bygg handleliste basert på restock-kadens per varetype.
@@ -95,12 +96,20 @@ def curate(
     som forslag. Hvis alle varianter i en varetype er blokkert, faller
     varetypen ut av forslagene.
 
+    `blocked_types` er et sett av varetype-nøkler (samme som `key`-kolonnen)
+    som utelates helt fra forslagene — i motsetning til `blocked`, der en
+    annen variant kan overta, forsvinner hele varetypen.
+
     `today` videresendes til `compute_cadence` slik at tester kan ankre
     abandon/forfall-tersklene til en fast dato. None betyr nå.
     """
     cadence = compute_cadence(lines, by_type=True, today=today)
     if cadence.empty:
         return cadence
+    if blocked_types:
+        cadence = cadence[~cadence["key"].isin(blocked_types)]
+        if cadence.empty:
+            return cadence
 
     # Finn representativt produkt per varetype: produktet med flest distinkte
     # ordrer (ikke det sist kjøpte — siste kan være en engangsvariant som
@@ -223,6 +232,7 @@ def main() -> None:
         top_n=args.top,
         max_per_category=args.max_per_category,
         blocked=blocked_ids(),
+        blocked_types=blocked_types(),
     )
     show(curated, cycle=args.cycle)
 

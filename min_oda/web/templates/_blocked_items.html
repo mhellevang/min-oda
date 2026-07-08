@@ -1,8 +1,30 @@
+{% if blocked_types %}
+<details class="blocked-section" open>
+  <summary>Skjulte varetyper ({{ blocked_types|length }})</summary>
+  <p class="muted" style="font-size: 12px; margin: 8px 0 10px;">
+    Hele varetypen er skjult fra forslagene. Klikk ↩ for å ta den inn igjen.
+  </p>
+  <ul class="blocked-chips">
+    {% for it in blocked_types %}
+    <li class="chip">
+      <span class="chip-text">{{ (it.name or it.key)|capitalize }}</span>
+      <button type="button" class="chip-x"
+              hx-post="/handleliste/unblock-type"
+              hx-vals='{"key": {{ it.key|tojson }}}'
+              hx-include="closest form"
+              hx-target="#table-and-blocked" hx-swap="innerHTML"
+              title="Vis varetypen {{ it.key }} igjen">↩</button>
+    </li>
+    {% endfor %}
+  </ul>
+</details>
+{% endif %}
 {% if blocked_items %}
 <details class="blocked-section">
-  <summary>Skjulte varer ({{ blocked_items|length }})</summary>
+  <summary>Skjulte produkter ({{ blocked_items|length }})</summary>
   <p class="muted" style="font-size: 12px; margin: 8px 0 10px;">
-    Disse forslagene er skjult fra listen. Klikk × for å vise dem igjen.
+    Enkeltprodukter som er skjult (en annen variant kan overta plassen).
+    Klikk ↩ for å vise dem igjen.
   </p>
   <ul class="blocked-chips">
     {% for it in blocked_items %}
@@ -14,7 +36,7 @@
               hx-vals='{"product_id": {{ it.product_id|tojson }}}'
               hx-include="closest form"
               hx-target="#table-and-blocked" hx-swap="innerHTML"
-              title="Vis {{ it.name or it.product_id }} igjen">×</button>
+              title="Vis {{ it.name or it.product_id }} igjen">↩</button>
     </li>
     {% endfor %}
   </ul>

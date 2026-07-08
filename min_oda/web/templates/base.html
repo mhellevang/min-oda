@@ -13,11 +13,44 @@
       --muted: #666;
       --rule: #e5e3df;
       --accent: #2a6f97;
+      --accent-hover: #235a7d;
       --accent-soft: #e8f0f6;
       --warn: #d62828;
       --warn-soft: #fde2e2;
       --ok: #2a9d3f;
       --ok-soft: #e0f3e3;
+      --track: #eee;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #16181c;
+        --card: #1e2127;
+        --ink: #e6e6e6;
+        --muted: #9aa0a8;
+        --rule: #31353d;
+        --accent: #5fa8d3;
+        --accent-hover: #7cbde0;
+        --accent-soft: #1d3345;
+        --warn: #f28b82;
+        --warn-soft: #3a1f1f;
+        --ok: #7bd88f;
+        --ok-soft: #1e3323;
+        --track: #2a2e35;
+      }
+      .status-forfalt { background: #3a1f1f; color: #f7a19a; }
+      .status-nå { background: #3a3210; color: #e8cf6a; }
+      .status-snart { background: #12303f; color: #8ecbe6; }
+      .status-rute { background: #173023; color: #8ed99e; }
+      .alert.ok { background: #173023; color: #8ed99e; }
+      .alert.warn { background: #3a3210; color: #e8cf6a; }
+      .alert.error { background: #3a1f1f; color: #f7a19a; }
+      .refresh-warn { color: #f28b82; }
+      .auth-banner {
+        background: #3a1f1f; border-color: #5a2a2a; color: #f4b7b2;
+      }
+      .auth-banner strong { color: #f7cfcc; }
+      .auth-banner button { background: #a13a34; }
+      .auth-banner button:hover { background: #b8443d; }
     }
     * { box-sizing: border-box; }
     body {
@@ -104,7 +137,7 @@
       margin-top: 2px;
     }
     .bar-bg {
-      background: #eee;
+      background: var(--track);
       border-radius: 3px;
       height: 8px;
       overflow: hidden;
@@ -286,7 +319,7 @@
       cursor: pointer;
       font-family: inherit;
     }
-    button.primary:hover { background: #235a7d; }
+    button.primary:hover { background: var(--accent-hover); }
     .alert {
       margin-top: 16px;
       padding: 12px 16px;
@@ -494,6 +527,106 @@
       outline: none;
       border-color: var(--accent);
       background-color: var(--card);
+    }
+    /* Innholdsfortegnelse på /innsikt — klebrig så den følger med i den lange siden */
+    nav.toc {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 10px 0;
+      margin-bottom: 20px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--rule);
+    }
+    nav.toc a {
+      font-size: 12px;
+      color: var(--muted);
+      text-decoration: none;
+      padding: 4px 10px;
+      border: 1px solid var(--rule);
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    nav.toc a:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+    /* To kolonner for kompakte tabeller. auto-fit gjør at en ensom seksjon
+       (når nabo-seksjonen er filtrert bort) tar full bredde igjen. */
+    .cols-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 20px;
+      align-items: start;
+      margin-bottom: 20px;
+    }
+    .cols-2 > section {
+      margin-bottom: 0;
+      min-width: 0;
+      overflow-x: auto;
+    }
+    /* Månedlig forbruk som HTML-søyler (erstatter matplotlib-PNG) */
+    .monthly-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 180px;
+      overflow-x: auto;
+      padding-top: 8px;
+    }
+    .mc-col {
+      flex: 1 0 14px;
+      min-width: 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100%;
+    }
+    .mc-track {
+      flex: 1;
+      width: 100%;
+      display: flex;
+      align-items: flex-end;
+    }
+    .mc-bar {
+      width: 100%;
+      background: var(--accent);
+      border-radius: 2px 2px 0 0;
+      min-height: 1px;
+    }
+    .mc-col:hover .mc-bar { background: var(--accent-hover); }
+    .mc-newyear { border-left: 1px solid var(--rule); }
+    .mc-label {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 4px;
+      white-space: nowrap;
+      text-align: center;
+    }
+    .mc-year { display: block; font-weight: 600; color: var(--ink); }
+    /* Skjul-hele-varetypen-knapp, søsken til .hide-btn */
+    .hide-type-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--muted);
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+      font-family: inherit;
+    }
+    tr:hover .hide-type-btn { color: var(--ink); }
+    .hide-type-btn:hover {
+      color: var(--warn);
+      border-color: var(--rule);
+      background: var(--warn-soft);
     }
   </style>
 </head>

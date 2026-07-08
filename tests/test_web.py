@@ -62,9 +62,12 @@ def test_innsikt_renders_kpis(client):
 
 @pytest.fixture
 def isolated_blocklist(tmp_path, monkeypatch):
-    """Pek block-fil mot tmp så ekte data/blocklist.json ikke berøres."""
+    """Pek block-filene mot tmp så ekte data ikke berøres."""
     from min_oda import blocklist
     monkeypatch.setattr(blocklist, "BLOCKLIST_PATH", tmp_path / "blocklist.json")
+    monkeypatch.setattr(
+        blocklist, "TYPE_BLOCKLIST_PATH", tmp_path / "blocked_types.json"
+    )
     yield
 
 
@@ -78,7 +81,7 @@ def test_block_and_unblock_round_trip(client, isolated_blocklist):
         data={"product_id": "999999", "name": "Testvare X"},
     )
     assert r.status_code == 200
-    assert "Skjulte varer" in r.text
+    assert "Skjulte produkter" in r.text
     assert "Testvare X" in r.text
     assert 999999 in blocklist.blocked_ids()
 
@@ -88,6 +91,29 @@ def test_block_and_unblock_round_trip(client, isolated_blocklist):
     )
     assert r.status_code == 200
     assert 999999 not in blocklist.blocked_ids()
+
+
+def test_block_and_unblock_type_round_trip(client, isolated_blocklist):
+    """POST /handleliste/block-type skjuler hele varetypen; unblock-type
+    tar den inn igjen."""
+    from min_oda import blocklist
+
+    r = client.post(
+        "/handleliste/block-type",
+        data={"key": "melk", "name": "Melk"},
+    )
+    assert r.status_code == 200
+    assert "Skjulte varetyper" in r.text
+    assert "melk" in blocklist.blocked_types()
+
+    r = client.post("/handleliste/unblock-type", data={"key": "melk"})
+    assert r.status_code == 200
+    assert "melk" not in blocklist.blocked_types()
+
+
+def test_block_type_missing_key_returns_400(client, isolated_blocklist):
+    r = client.post("/handleliste/block-type", data={"key": ""})
+    assert r.status_code == 400
 
 
 def test_block_invalid_id_returns_400(client, isolated_blocklist):

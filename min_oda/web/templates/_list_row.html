@@ -53,12 +53,18 @@
   {% if new_list %}
   <td class="muted nowrap" title="{{ r.last_label }}">{{ r.days_since|format_days_ago }}</td>
   {% endif %}
-  <td>
+  <td class="row-actions nowrap">
     <button type="button" class="hide-btn"
             hx-post="/handleliste/block"
             hx-vals='{"product_id": {{ r.product_id|tojson }}, "name": {{ r.product_name|tojson }}}'
             hx-include="closest form"
             hx-target="#table-and-blocked" hx-swap="innerHTML"
-            title="Skjul {{ r.product_name }} fra fremtidige forslag (kan vises igjen via Skjulte varer)">×</button>
+            title="Skjul bare denne varianten ({{ r.product_name }}). En annen variant av {{ r.key }} kan overta.">×</button>
+    <button type="button" class="hide-type-btn"
+            hx-post="/handleliste/block-type"
+            hx-vals='{"key": {{ r.key|tojson }}, "name": {{ r.key|capitalize|tojson }}}'
+            hx-include="closest form"
+            hx-target="#table-and-blocked" hx-swap="innerHTML"
+            title="Skjul hele varetypen «{{ r.key }}» fra forslag (ingen variant overtar).">⊘</button>
   </td>
 </tr>

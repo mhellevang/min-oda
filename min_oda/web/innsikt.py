@@ -7,17 +7,10 @@ dicts/lister ut, slik at Jinja-templaten kan rendre HTML.
 
 from __future__ import annotations
 
-import base64
-import io
 from collections import Counter
 from itertools import combinations
 
-import matplotlib
-
-matplotlib.use("Agg")  # noqa: E402  (sett før pyplot-import)
-
-import matplotlib.pyplot as plt  # noqa: E402
-import pandas as pd  # noqa: E402
+import pandas as pd
 
 
 NB_MONTHS = ["", "jan", "feb", "mar", "apr", "mai", "jun",
@@ -60,10 +53,16 @@ def kpis(orders: pd.DataFrame, lines: pd.DataFrame) -> dict:
 # ---------- plot --------------------------------------------------------
 
 
-def monthly_spend_plot_b64(orders: pd.DataFrame) -> str | None:
+def monthly_spend(orders: pd.DataFrame) -> list[dict]:
+    """Månedlig forbruk som ren data — én dict per måned, klar for HTML-søyler.
+
+    `pct` er relativt til dyreste måned (høyden på søylen), `sum_kr` er kroner.
+    `new_year=True` markerer januar (og aller første måned) så templaten kan
+    tegne et årsskille. Måneder uten ordre fylles inn som 0 så tidsaksen ikke
+    hopper over ferier."""
     df = orders.dropna(subset=["date"]).copy()
     if df.empty:
-        return None
+        return []
     df["month"] = (
         df["date"].dt.tz_convert("Europe/Oslo").dt.tz_localize(None).dt.to_period("M")
     )
@@ -71,19 +70,19 @@ def monthly_spend_plot_b64(orders: pd.DataFrame) -> str | None:
     full_idx = pd.period_range(monthly.index.min(), monthly.index.max(), freq="M")
     monthly = monthly.reindex(full_idx, fill_value=0)
 
-    fig, ax = plt.subplots(figsize=(13, 4.5))
-    ax.bar(monthly.index.to_timestamp(), monthly.values, width=25, color="#2a6f97")
-    yr_min = monthly.index.min().year
-    yr_max = monthly.index.max().year
-    ax.set_title(f"Månedlig forbruk ({yr_min}–{yr_max})")
-    ax.set_ylabel("Sum kr")
-    ax.grid(axis="y", alpha=0.3)
-    fig.tight_layout()
-
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=110)
-    plt.close(fig)
-    return base64.b64encode(buf.getvalue()).decode("ascii")
+    peak = float(monthly.max()) or 1.0
+    out: list[dict] = []
+    for i, (period, kr) in enumerate(monthly.items()):
+        kr = float(kr)
+        out.append({
+            "label": NB_MONTHS[period.month],
+            "year": period.year,
+            "full": f"{NB_MONTHS[period.month]} {period.year}",
+            "sum_kr": kr,
+            "pct": round(kr / peak * 100),
+            "new_year": i == 0 or period.month == 1,
+        })
+    return out
 
 
 # ---------- topp produkter/kategorier ----------------------------------

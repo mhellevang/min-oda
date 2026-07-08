@@ -44,7 +44,7 @@ All analysis modules accept DataFrames from `data_loader.load_both()` and return
 - `restock.py:compute_cadence(lines, by_type=True)` — for each product (or varetype), computes median interval between purchases, `days_since`, `days_until_due`, status (forfalt/snart/i rute), and CV. Drops abandoned products (`days_since > median * abandon_factor`) and rare ones (`median > 90 d`). The `by_type=True` path is the foundation for both shopping-list features.
 - `build_list.py:curate(lines, list_cycle_days, top_n, max_per_category, blocked)` — picks the *most-bought* product as the representative for each cadence-stable varetype, computes `foreslått_antall = ceil(cycle / median)`, applies category priority + caps. The blocklist filters out specific `product_id`s while leaving the varetype available (another variant can step in).
 - `cart_diff.py:compute_diff(ideal, cart, top_up)` — joins curated list against the live cart *by varetype, not product_id*. Default returns only varetypes missing from the cart. `top_up=True` also includes those with too-low quantity.
-- `blocklist.py` — JSON-backed persistent block list at `data/blocklist.json`. `block(pid)` / `unblock(pid)` / `blocked_ids()` / `list_blocked()`.
+- `blocklist.py` — to JSON-backede blokklister. Produktnivå i `data/blocklist.json` (`block(pid)` / `unblock(pid)` / `blocked_ids()` / `list_blocked()`) blokkerer én variant, så en annen variant av samme varetype kan overta. Varetypenivå i `data/blocked_types.json` (`block_type(key)` / `unblock_type(key)` / `blocked_types()` / `list_blocked_types()`) skjuler hele varetypen fra forslag. `curate()` tar begge (`blocked=` og `blocked_types=`).
 
 ### Web app (`min_oda/web/`)
 
@@ -54,7 +54,7 @@ FastAPI + Jinja2 + HTMX. Two pages:
   - Default: diff against the live cart, show only missing items (`compute_diff`).
   - `?new_list=true`: ignore cart, show the full curated list.
   Sliders (cycle/top/max_per_cat) and search are query params. `is_extra` flags rows that wouldn't appear at default filters — UI marks these with an accent stripe. `_mode_urls()` preserves filters when switching modes.
-- `/innsikt` — KPIs, monthly-spend plot (matplotlib `Agg` → base64 PNG), staples, cuisine/cooking/health profiles, top products + categories, seasonality, and basket-analysis (lift + support pairs, plus product lookup). All compute lives in `web/innsikt.py`.
+- `/innsikt` — KPIs, monthly-spend plot (inline HTML-søyler, ikke matplotlib), staples, cuisine/cooking/health profiles, top products + categories, seasonality, and basket-analysis (lift + support pairs, plus product lookup). All compute lives in `web/innsikt.py`. En klebrig `nav.toc` øverst gir ankersnarveier, og kompakte tabeller pares i `.cols-2`-grid.
 
 State is cached in module-level globals (`_ORDERS`, `_LINES`, `_CART`, `_BASKET_CACHE`, `_BASELINE_IDS`). `invalidate_caches()` resets all of them and is called after a successful `POST /refresh`; `invalidate_blocklist_caches()` resets only the baseline ids after a block/unblock. The cart has its own 120 s TTL.
 

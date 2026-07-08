@@ -10,7 +10,22 @@
 </p>
 
 {# ---------- nøkkeltall ---------- #}
-<section>
+<nav class="toc" aria-label="Snarveier">
+  <a href="#nokkeltall">Nøkkeltall</a>
+  {% if monthly %}<a href="#forbruk">Forbruk</a>{% endif %}
+  {% if staples %}<a href="#dna">Husstandens DNA</a>{% endif %}
+  {% if cuisines %}<a href="#matkultur">Matkultur</a>{% endif %}
+  <a href="#kokestil">Kokestil</a>
+  <a href="#helse">Helse</a>
+  {% if beverages %}<a href="#drikke">Drikke</a>{% endif %}
+  {% if top_p %}<a href="#topp-produkter">Topp produkter</a>{% endif %}
+  {% if top_c %}<a href="#topp-kategorier">Topp kategorier</a>{% endif %}
+  {% if seasonal %}<a href="#sesong">Sesong</a>{% endif %}
+  <a href="#aret">Året</a>
+  {% if basket_lift or basket_support %}<a href="#kobling">Kobling</a>{% endif %}
+</nav>
+
+<section id="nokkeltall">
   <h2>Nøkkeltall</h2>
   <div class="kpis">
     <div class="kpi">
@@ -35,20 +50,32 @@
 </section>
 
 {# ---------- månedlig forbruk ---------- #}
-{% if monthly_plot %}
-<section>
+{% if monthly %}
+<section id="forbruk">
   <h2>Månedlig forbruk</h2>
   <p class="muted">
     Hver søyle er én måned. Topper henger ofte sammen med høytider, og
     bunner med sommerferie eller bortreise.
   </p>
-  <img class="plot" src="data:image/png;base64,{{ monthly_plot }}" alt="Månedlig forbruk">
+  <div class="monthly-chart" role="img" aria-label="Månedlig forbruk per måned">
+    {% for m in monthly %}
+    <div class="mc-col{% if m.new_year %} mc-newyear{% endif %}"
+         title="{{ m.full }}: {{ "{:,.0f}".format(m.sum_kr).replace(",", " ") }} kr">
+      <div class="mc-track">
+        <div class="mc-bar" style="height: {{ m.pct }}%"></div>
+      </div>
+      <div class="mc-label">
+        {{ m.label }}{% if m.new_year %}<span class="mc-year">'{{ "%02d"|format(m.year % 100) }}</span>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
 </section>
 {% endif %}
 
 {# ---------- husstandens DNA ---------- #}
 {% if staples %}
-<section>
+<section id="dna">
   <h2>Husstandens DNA</h2>
   <p class="muted">
     Varer som dukker opp i mer enn 40 % av ordrene — dette er det som
@@ -75,7 +102,7 @@
 
 {# ---------- matkultur ---------- #}
 {% if cuisines %}
-<section>
+<section id="matkultur">
   <h2>Matkultur</h2>
   <p class="muted">
     Hvor i verden spiser dere? Telt på nøkkelord i produktnavnene — én
@@ -115,7 +142,7 @@
 {% endif %}
 
 {# ---------- kokestil + prisbevissthet + helse ---------- #}
-<section>
+<section id="kokestil">
   <h2>Kokestil og handlevaner</h2>
   <p class="muted">
     Lager dere mat eller varmer dere mat? Andelen råvarer mot ferdig­retter
@@ -145,7 +172,7 @@
   </div>
 </section>
 
-<section>
+<section id="helse">
   <h2>Helsesignaler</h2>
   <p class="muted">
     Brutto kategori-spend. Mest interessant er kjøtt:fisk-forholdet og
@@ -173,7 +200,7 @@
 
 {# ---------- drikke ---------- #}
 {% if beverages %}
-<section>
+<section id="drikke">
   <h2>Drikkeprofil</h2>
   <p class="muted">
     Bokser, brett og flasker telt sammen. Alkoholfri øl er trukket fra
@@ -198,8 +225,9 @@
 {% endif %}
 
 {# ---------- topp produkter ---------- #}
+<div class="cols-2">
 {% if top_p %}
-<section>
+<section id="topp-produkter">
   <h2>Topp produkter — siste 12 måneder</h2>
   <table>
     <thead>
@@ -221,7 +249,7 @@
 
 {# ---------- topp produkter etter pengebruk ---------- #}
 {% if top_p_spend %}
-<section>
+<section id="topp-spend">
   <h2>Topp produkter etter pengebruk — siste 12 måneder</h2>
   <p class="muted">
     Samme periode som tabellen over, men sortert på hvor mye kronene faktisk
@@ -244,10 +272,12 @@
   </table>
 </section>
 {% endif %}
+</div>
 
-{# ---------- topp kategorier ---------- #}
+{# ---------- topp kategorier + sesong ---------- #}
+<div class="cols-2">
 {% if top_c %}
-<section>
+<section id="topp-kategorier">
   <h2>Topp kategorier — siste 12 måneder</h2>
   <table>
     <thead>
@@ -267,9 +297,8 @@
 </section>
 {% endif %}
 
-{# ---------- sesongprodukter ---------- #}
 {% if seasonal %}
-<section>
+<section id="sesong">
   <h2>Sesongprodukter</h2>
   <p class="muted">
     Varer som er kjøpt i bare noen få måneder av året — typisk
@@ -292,9 +321,11 @@
   </table>
 </section>
 {% endif %}
+</div>
 
-{# ---------- juli-gapet ---------- #}
-<section>
+{# ---------- juli-gapet + engangs ---------- #}
+<div class="cols-2">
+<section id="aret">
   <h2>Året i Oda-måneder</h2>
   <p class="muted">
     Hvor mange ordrer per måned, summert over {{ july.n_years }} år.
@@ -319,7 +350,7 @@
 
 {# ---------- engangs-kjøp ---------- #}
 {% if one_off %}
-<section>
+<section id="engangs">
   <h2>Engangs-kjøp som ikke kom tilbake</h2>
   <p class="muted">
     Produkter kjøpt én eller to ganger, ikke sett siste 90 dager. Ofte
@@ -348,10 +379,11 @@
   </table>
 </section>
 {% endif %}
+</div>
 
 {# ---------- basket ---------- #}
 {% if basket_lift or basket_support %}
-<section>
+<section id="kobling">
   <h2>Hva henger sammen?</h2>
   <p class="muted">
     Produkter som ofte havner i samme ordre. <em>Lift</em> rangerer det

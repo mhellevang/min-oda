@@ -353,6 +353,7 @@ def get_baseline_ids() -> set[int]:
             top_n=DEFAULT_TOP,
             max_per_category=DEFAULT_MAX_PER_CAT,
             blocked=blocklist.blocked_ids(),
+            blocked_types=blocklist.blocked_types(),
         )
         _BASELINE_IDS = (
             {int(x) for x in baseline["product_id"]}
@@ -487,6 +488,7 @@ def _build_rows(
     ideal = curate(
         lines, list_cycle_days=cycle, top_n=top, max_per_category=max_per_cat,
         blocked=blocklist.blocked_ids(),
+        blocked_types=blocklist.blocked_types(),
     )
     if ideal.empty:
         return [], 0, 0
@@ -657,6 +659,7 @@ def handleliste(
             "url_diff": url_diff,
             "url_new_list": url_new_list,
             "blocked_items": blocklist.list_blocked(),
+            "blocked_types": blocklist.list_blocked_types(),
         },
     )
 
@@ -717,6 +720,7 @@ async def _render_body_after_block_change(request: Request) -> HTMLResponse:
             "cycle": cycle,
             "list_total": _list_total(rows),
             "blocked_items": blocklist.list_blocked(),
+            "blocked_types": blocklist.list_blocked_types(),
         },
     )
 
@@ -741,6 +745,30 @@ async def handleliste_unblock(request: Request) -> HTMLResponse:
     except ValueError:
         return HTMLResponse("Ugyldig product_id", status_code=400)
     blocklist.unblock(pid)
+    invalidate_blocklist_caches()
+    return await _render_body_after_block_change(request)
+
+
+@app.post("/handleliste/block-type", response_class=HTMLResponse)
+async def handleliste_block_type(request: Request) -> HTMLResponse:
+    """Blokker en hel varetype — hele typen forsvinner fra forslag, ikke bare
+    én variant. `key` er varetype-nøkkelen, `name` en valgfri etikett."""
+    form = await request.form()
+    key = str(form.get("key") or "").strip()
+    if not key:
+        return HTMLResponse("Mangler varetype", status_code=400)
+    blocklist.block_type(key, name=str(form.get("name") or ""))
+    invalidate_blocklist_caches()
+    return await _render_body_after_block_change(request)
+
+
+@app.post("/handleliste/unblock-type", response_class=HTMLResponse)
+async def handleliste_unblock_type(request: Request) -> HTMLResponse:
+    form = await request.form()
+    key = str(form.get("key") or "").strip()
+    if not key:
+        return HTMLResponse("Mangler varetype", status_code=400)
+    blocklist.unblock_type(key)
     invalidate_blocklist_caches()
     return await _render_body_after_block_change(request)
 
@@ -939,7 +967,7 @@ def innsikt_page(request: Request, q: str = "") -> HTMLResponse:
         {
             "active": "innsikt",
             "kpis": innsikt.kpis(orders, lines),
-            "monthly_plot": innsikt.monthly_spend_plot_b64(orders),
+            "monthly": innsikt.monthly_spend(orders),
             "staples": innsikt.staples(orders, lines),
             "cuisines": innsikt.cuisine_mix(lines),
             "baby": innsikt.baby_signal(lines),
