@@ -1,5 +1,5 @@
 <tr {% if r.is_extra %}class="is-extra" title="Kommer fram fordi du utvidet et filter"{% endif %}>
-  <td class="muted">{{ r.category }}</td>
+  <td class="muted hide-sm">{{ r.category }}</td>
   <td class="nowrap">
     {{ r.key|capitalize }}
     {% if r.is_added_variant %}
@@ -32,15 +32,19 @@
     {% endif %}
   </td>
   {% if not new_list %}
-  <td class="num muted">{{ r.forslag }}</td>
-  <td class="num muted">{{ r.i_kurv }}</td>
+  <td class="num muted hide-sm">{{ r.forslag }}</td>
+  <td class="num muted hide-sm">{{ r.i_kurv }}</td>
   {% endif %}
   <td class="num nowrap">
-    <input type="number" class="qty" name="qty_{{ r.product_id }}"
-           value="{{ r.qty }}" data-default="{{ r.qty }}"
-           data-pid="{{ r.product_id }}"
-           data-price="{{ '%.2f'|format(r.unit_price) if r.unit_price is not none else '' }}"
-           min="0" step="1">
+    <span class="qty-stepper">
+      <button type="button" class="qty-btn" data-step="-1" aria-label="Én færre">−</button>
+      <input type="number" class="qty" name="qty_{{ r.product_id }}"
+             value="{{ r.qty }}" data-default="{{ r.qty }}"
+             data-pid="{{ r.product_id }}"
+             data-price="{{ '%.2f'|format(r.unit_price) if r.unit_price is not none else '' }}"
+             min="0" step="1">
+      <button type="button" class="qty-btn" data-step="1" aria-label="Én til">+</button>
+    </span>
     <button type="button" class="reset-qty" data-pid="{{ r.product_id }}"
             hidden title="Tilbakestill til foreslått antall">↻</button>
   </td>
@@ -51,7 +55,7 @@
   <td><span class="status status-{{ r.status|status_class }}"
            title="Trengs {{ r.days_until_due|format_due }} · vanligvis hver {{ r.median }}. d">{{ r.status }}</span></td>
   {% if new_list %}
-  <td class="muted nowrap" title="{{ r.last_label }}">{{ r.days_since|format_days_ago }}</td>
+  <td class="muted nowrap hide-sm" title="{{ r.last_label }}">{{ r.days_since|format_days_ago }}</td>
   {% endif %}
   <td class="row-actions nowrap">
     <button type="button" class="hide-btn"

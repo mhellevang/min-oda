@@ -2,20 +2,20 @@
 <table>
   <thead>
     <tr>
-      <th>Kategori</th>
+      <th class="hide-sm">Kategori</th>
       <th>Varetype</th>
       <th>Produkt</th>
       {% if new_list %}
       <th class="num">Antall</th>
       {% else %}
-      <th class="num">Forslag</th>
-      <th class="num">I kurv</th>
+      <th class="num hide-sm">Forslag</th>
+      <th class="num hide-sm">I kurv</th>
       <th class="num">Mangler</th>
       {% endif %}
       <th class="num">Pris</th>
       <th>Forfall</th>
       {% if new_list %}
-      <th>Sist kjøpt</th>
+      <th class="hide-sm">Sist kjøpt</th>
       {% endif %}
       <th aria-label="Skjul"></th>
     </tr>

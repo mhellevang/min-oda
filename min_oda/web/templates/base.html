@@ -559,7 +559,7 @@
        (når nabo-seksjonen er filtrert bort) tar full bredde igjen. */
     .cols-2 {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
       gap: 20px;
       align-items: start;
       margin-bottom: 20px;
@@ -628,6 +628,81 @@
       border-color: var(--rule);
       background: var(--warn-soft);
     }
+    .qty-stepper {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      vertical-align: middle;
+    }
+    /* −/+ vises bare på touch og smale skjermer, se media-blokkene under.
+       Desktop har native spinnere i tallfeltet. */
+    .qty-btn {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--ink);
+      font-size: 16px;
+      line-height: 1;
+      padding: 0;
+      cursor: pointer;
+      font-family: inherit;
+      flex: none;
+    }
+    .qty-btn:active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+    /* Mobil. Ligger sist i arket så reglene vinner over basisreglene
+       lenger opp (lik spesifisitet, siste vinner). */
+    @media (max-width: 720px) {
+      .wrap { padding: 16px 12px 48px; }
+      h1 { font-size: 24px; }
+      section { padding: 14px 12px; }
+      nav.tabs { flex-wrap: wrap; }
+      nav.tabs a { padding: 10px 12px; }
+      .refresh-status { font-size: 11px; }
+      .controls { gap: 10px; }
+      .mode-toggle { display: flex; width: 100%; }
+      .mode-toggle a { flex: 1; text-align: center; padding: 10px 8px; }
+      .create-row { flex-direction: column; }
+      table { font-size: 13px; }
+      th, td { padding: 6px; }
+      .hide-sm { display: none; }
+      /* Tabellene beholder kolonnene sine, men ruller sidelengs i stedet
+         for å sprenge siden. */
+      #table-wrap, section { overflow-x: auto; }
+      .product-select { max-width: 160px; }
+      .qty-btn { display: inline-flex; }
+      input[type="number"].qty { width: 44px; text-align: center; }
+      input[type="number"].qty::-webkit-inner-spin-button,
+      input[type="number"].qty::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+      input[type="number"].qty { -moz-appearance: textfield; appearance: textfield; }
+      .bar-bg { width: 60px; }
+      /* Ankerchipsene på én rullbar linje i stedet for å fylle halve skjermen. */
+      nav.toc { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      /* iOS zoomer inn på felter med skrift under 16px. */
+      .controls input,
+      .create-row input[type="text"],
+      input[type="number"].qty { font-size: 16px; }
+    }
+    /* Touch-skjermer har ingen hover, så knapper som bare vises ved hover
+       må alltid være synlige der. */
+    @media (hover: none) {
+      .add-variant, .remove-variant { visibility: visible; }
+    }
+    @media (pointer: coarse) {
+      .hide-btn, .hide-type-btn { width: 32px; height: 32px; }
+      .chip-x { width: 26px; height: 26px; }
+      .reset-qty { width: 24px; }
+      /* Nettbrett er bredere enn 720px men trenger fortsatt −/+. */
+      .qty-btn { display: inline-flex; }
+    }
   </style>
 </head>
 <body>
@@ -693,7 +768,8 @@
       window.minOdaRecount = () => recomputeTotals(document);
 
       function updateResetVisibility(inp) {
-        const btn = inp.parentElement && inp.parentElement.querySelector(
+        const td = inp.closest('td');
+        const btn = td && td.querySelector(
           `.reset-qty[data-pid="${inp.dataset.pid}"]`
         );
         if (!btn) return;
@@ -727,10 +803,24 @@
         recomputeTotals(document);
       });
 
+      // −/+-knappene rundt antallsfeltet. Dispatcher 'input' så lagring,
+      // reset-knapp og totalsum oppdateres via samme sti som manuell tasting.
+      document.addEventListener('click', (e) => {
+        const btn = e.target.closest && e.target.closest('.qty-btn');
+        if (!btn) return;
+        const td = btn.closest('td');
+        const inp = td && td.querySelector('input.qty[data-pid]');
+        if (!inp) return;
+        const cur = parseInt(inp.value, 10);
+        const next = (isNaN(cur) ? 0 : cur) + parseInt(btn.dataset.step, 10);
+        inp.value = Math.max(0, next);
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+
       document.addEventListener('click', (e) => {
         const btn = e.target.closest && e.target.closest('.reset-qty');
         if (!btn) return;
-        const td = btn.parentElement;
+        const td = btn.closest('td');
         const inp = td && td.querySelector(`input.qty[data-pid="${btn.dataset.pid}"]`);
         if (!inp) return;
         const form = inp.closest('form[data-mode]');
