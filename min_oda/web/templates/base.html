@@ -521,6 +521,16 @@
       color: var(--warn);
       background: var(--warn-soft);
     }
+    /* Mens unblock-requesten pågår (treg linje mot serveren) snurrer pila
+       og knappen er disablet, så klikket ikke ser ut som det ble borte. */
+    .chip-x.htmx-request {
+      color: var(--accent);
+      animation: chip-spin 0.8s linear infinite;
+    }
+    .chip-x:disabled { cursor: default; }
+    @keyframes chip-spin {
+      to { transform: rotate(360deg); }
+    }
     #table-wrap th:last-child, #table-wrap td:last-child {
       width: 1px;
       white-space: nowrap;

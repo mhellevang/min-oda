@@ -13,6 +13,7 @@
               hx-vals='{"key": {{ it.key|tojson }}}'
               hx-include="closest form"
               hx-target="#table-and-blocked" hx-swap="innerHTML"
+              hx-disabled-elt="this"
               title="Vis varetypen {{ it.key }} igjen">↩</button>
     </li>
     {% endfor %}
@@ -36,6 +37,7 @@
               hx-vals='{"product_id": {{ it.product_id|tojson }}}'
               hx-include="closest form"
               hx-target="#table-and-blocked" hx-swap="innerHTML"
+              hx-disabled-elt="this"
               title="Vis {{ it.name or it.product_id }} igjen">↩</button>
     </li>
     {% endfor %}
