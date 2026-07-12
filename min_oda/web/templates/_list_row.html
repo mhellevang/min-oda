@@ -15,6 +15,14 @@
             title="Legg til en annen variant av samme varetype">+</button>
     {% endif %}
   </td>
+  <td class="thumb">
+    {% if r.image %}
+    <a href="{{ r.image }}" target="_blank" rel="noopener"
+       title="{{ r.product_name }} (åpne bildet i full størrelse)">
+      <img src="{{ r.image }}" alt="{{ r.product_name }}" loading="lazy">
+    </a>
+    {% endif %}
+  </td>
   <td>
     {% if r.variants and r.variants|length > 1 %}
     <select class="product-select"

@@ -628,6 +628,18 @@
       border-color: var(--rule);
       background: var(--warn-soft);
     }
+    /* Miniatyrbilde på handlelista — hvit bakgrunn siden Odas produktfoto
+       er frilagt på hvitt og ellers flyter ut i mørk modus. */
+    td.thumb { width: 44px; padding-top: 2px; padding-bottom: 2px; }
+    td.thumb img {
+      display: block;
+      width: 38px;
+      height: 38px;
+      object-fit: contain;
+      background: #fff;
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+    }
     .qty-stepper {
       display: inline-flex;
       align-items: center;
@@ -678,6 +690,8 @@
          for å sprenge siden. */
       #table-wrap, section { overflow-x: auto; }
       .product-select { max-width: 160px; }
+      td.thumb { width: 38px; }
+      td.thumb img { width: 32px; height: 32px; }
       .qty-btn { display: inline-flex; }
       input[type="number"].qty { width: 44px; text-align: center; }
       input[type="number"].qty::-webkit-inner-spin-button,

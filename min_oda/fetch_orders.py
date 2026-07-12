@@ -136,6 +136,7 @@ def extract_lines(detail: dict) -> list[dict]:
                 "unit_price": unit_price,
                 "line_total": gross,
                 "vat_percentage": item.get("vat_percentage"),
+                "product_image": item.get("product_image"),
             })
     return rows
 

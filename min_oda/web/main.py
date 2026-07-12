@@ -32,6 +32,7 @@ from ..build_list import curate
 from ..cart_diff import compute_diff, fetch_cart
 from ..data_loader import load_both
 from ..fetch_orders import maybe_refresh_data
+from ..images import latest_product_images
 from ..prices import latest_unit_prices
 from ..oda_client import (
     MissingCredentials,
@@ -165,6 +166,7 @@ DEFAULT_MAX_PER_CAT = 8
 _BASELINE_IDS: set[int] | None = None
 _CADENCE_BY_TYPE: pd.DataFrame | None = None
 _PRICE_MAP: dict[int, float] | None = None
+_IMAGE_MAP: dict[int, str] | None = None
 _VARIANT_LIMIT = 10
 
 _REFRESH_STATUS: dict = {
@@ -262,7 +264,7 @@ def refresh_status_ctx() -> dict:
 def invalidate_caches() -> None:
     """Nullstill alle in-memory caches — kalles etter en vellykket refresh."""
     global _LINES, _ORDERS, _CART, _BASELINE_IDS, _BASKET_CACHE, _CADENCE_BY_TYPE
-    global _PRICE_MAP
+    global _PRICE_MAP, _IMAGE_MAP
     _LINES = None
     _ORDERS = None
     _CART = None
@@ -270,6 +272,7 @@ def invalidate_caches() -> None:
     _BASKET_CACHE = None
     _CADENCE_BY_TYPE = None
     _PRICE_MAP = None
+    _IMAGE_MAP = None
 
 
 def invalidate_cart_cache() -> None:
@@ -340,6 +343,14 @@ def get_price_map() -> dict[int, float]:
     if _PRICE_MAP is None:
         _PRICE_MAP = latest_unit_prices(get_lines())
     return _PRICE_MAP
+
+
+def get_image_map() -> dict[int, str]:
+    """Cache bilde-URL per produkt — beregnes én gang per data-reload."""
+    global _IMAGE_MAP
+    if _IMAGE_MAP is None:
+        _IMAGE_MAP = latest_product_images(get_lines())
+    return _IMAGE_MAP
 
 
 def get_baseline_ids() -> set[int]:
@@ -434,6 +445,7 @@ def _build_row_dict(
     baseline_ids: set[int],
     variants: list[dict],
     price_map: dict[int, float] | None = None,
+    image_map: dict[int, str] | None = None,
     is_added_variant: bool = False,
 ) -> dict:
     """Bygg rad-dict klar for `_list_row.html`, gitt en cadence-rad
@@ -456,6 +468,7 @@ def _build_row_dict(
     line_cost = unit_price * default_qty if unit_price is not None else None
     return {
         "product_id": pid,
+        "image": (image_map or {}).get(pid),
         "unit_price": unit_price,
         "line_cost": line_cost,
         "category": category,
@@ -495,6 +508,7 @@ def _build_rows(
 
     baseline_ids = get_baseline_ids()
     price_map = get_price_map()
+    image_map = get_image_map()
 
     cart_total = 0
     cart: pd.DataFrame | None = None
@@ -528,6 +542,7 @@ def _build_rows(
             baseline_ids=baseline_ids,
             variants=variants,
             price_map=price_map,
+            image_map=image_map,
         )
         if row["is_extra"]:
             extra_count += 1
@@ -600,6 +615,7 @@ def _render_variant_row(
         baseline_ids=get_baseline_ids(),
         variants=variants,
         price_map=get_price_map(),
+        image_map=get_image_map(),
         is_added_variant=is_added_variant,
     )
     return templates.TemplateResponse(

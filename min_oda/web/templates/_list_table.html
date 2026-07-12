@@ -4,6 +4,7 @@
     <tr>
       <th class="hide-sm">Kategori</th>
       <th>Varetype</th>
+      <th aria-label="Bilde"></th>
       <th>Produkt</th>
       {% if new_list %}
       <th class="num">Antall</th>
@@ -27,7 +28,7 @@
   </tbody>
   <tfoot>
     <tr class="total-row">
-      <td colspan="{{ 8 if new_list else 9 }}" class="num">
+      <td colspan="{{ 9 if new_list else 10 }}" class="num">
         Totalt (ca.) <strong id="list-total">{{ list_total|format_kr }}</strong>
       </td>
     </tr>
