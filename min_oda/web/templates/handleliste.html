@@ -39,33 +39,9 @@
      dirigerer riktig vei. Selve flagget følger med så server kan filtrere. #}
   <input type="hidden" name="new_list" value="{{ 'true' if new_list else 'false' }}">
 
-  <section>
-    <div class="controls">
-      <label>Dager listen skal vare
-        <input type="number" name="cycle" value="{{ cycle }}"
-               min="7" max="28" step="1"
-               hx-get="/handleliste/table"
-               hx-trigger="input changed delay:300ms"
-               hx-include="closest form"
-               hx-target="#table-wrap" hx-swap="innerHTML">
-      </label>
-      <label>Maks antall varer
-        <input type="number" name="top" value="{{ top }}"
-               min="20" max="120" step="5"
-               hx-get="/handleliste/table"
-               hx-trigger="input changed delay:300ms"
-               hx-include="closest form"
-               hx-target="#table-wrap" hx-swap="innerHTML">
-      </label>
-      <label>Maks per kategori
-        <input type="number" name="max_per_cat" value="{{ max_per_cat }}"
-               min="4" max="20" step="1"
-               hx-get="/handleliste/table"
-               hx-trigger="input changed delay:300ms"
-               hx-include="closest form"
-               hx-target="#table-wrap" hx-swap="innerHTML">
-      </label>
-      <label>Søk
+  <section class="controls-section">
+    <div class="search-row">
+      <label class="search-field">Søk
         <input type="text" name="search" value="{{ search }}"
                placeholder="f.eks. melk, brød, agurk"
                hx-get="/handleliste/table"
@@ -73,6 +49,35 @@
                hx-include="closest form"
                hx-target="#table-wrap" hx-swap="innerHTML">
       </label>
+      <details class="settings">
+        <summary title="Innstillinger" aria-label="Innstillinger">⚙</summary>
+        <div class="settings-panel">
+          <label>Dager listen skal vare
+            <input type="number" name="cycle" value="{{ cycle }}"
+                   min="7" max="28" step="1"
+                   hx-get="/handleliste/table"
+                   hx-trigger="input changed delay:300ms"
+                   hx-include="closest form"
+                   hx-target="#table-wrap" hx-swap="innerHTML">
+          </label>
+          <label>Maks antall varer
+            <input type="number" name="top" value="{{ top }}"
+                   min="20" max="120" step="5"
+                   hx-get="/handleliste/table"
+                   hx-trigger="input changed delay:300ms"
+                   hx-include="closest form"
+                   hx-target="#table-wrap" hx-swap="innerHTML">
+          </label>
+          <label>Maks per kategori
+            <input type="number" name="max_per_cat" value="{{ max_per_cat }}"
+                   min="4" max="20" step="1"
+                   hx-get="/handleliste/table"
+                   hx-trigger="input changed delay:300ms"
+                   hx-include="closest form"
+                   hx-target="#table-wrap" hx-swap="innerHTML">
+          </label>
+        </div>
+      </details>
     </div>
 
     {% if not new_list %}

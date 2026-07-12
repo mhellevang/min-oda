@@ -144,10 +144,8 @@ def _register_template_globals() -> None:
     templates.env.globals["refresh_status"] = refresh_status_ctx
     templates.env.globals["auth_enabled"] = auth.auth_enabled
     templates.env.filters["format_age"] = format_age
-    templates.env.filters["format_due"] = format_due
     templates.env.filters["format_days_ago"] = format_days_ago
     templates.env.filters["format_kr"] = format_kr
-    templates.env.filters["status_class"] = status_class
 
 
 # Registrert i bunnen av modulen, etter at refresh_status_ctx er definert.
@@ -173,13 +171,6 @@ _REFRESH_STATUS: dict = {
     "refreshed": False,
     "data_age_hours": None,
     "error": None,
-}
-
-_STATUS_CLASS = {
-    "forfalt": "forfalt",
-    "akkurat nå": "nå",
-    "snart": "snart",
-    "i rute": "rute",
 }
 
 _NB_MONTHS_SHORT = ["", "jan", "feb", "mar", "apr", "mai", "jun",
@@ -210,21 +201,6 @@ def format_age(hours: float | None) -> str:
     if days < 30:
         return f"{days} d siden"
     return f"{days // 30} mnd siden"
-
-
-def format_due(d: int | float) -> str:
-    """Jinja-filter: dager til neste forfall → 'i dag' / 'X d siden' / 'om X d'."""
-    d = int(d)
-    if d == 0:
-        return "i dag"
-    if d < 0:
-        return f"{-d} d siden"
-    return f"om {d} d"
-
-
-def status_class(status: str) -> str:
-    """Jinja-filter: status-streng → kort CSS-klasse."""
-    return _STATUS_CLASS.get(status, "rute")
 
 
 def format_kr(value) -> str:
@@ -478,9 +454,6 @@ def _build_row_dict(
         "i_kurv": i_kurv,
         "mangler": mangler,
         "qty": default_qty,
-        "median": int(round(cadence_row["median_days"])),
-        "status": cadence_row["status"],
-        "days_until_due": int(cadence_row["days_until_due"]),
         "days_since": int(cadence_row["days_since"]) if pd.notna(cadence_row.get("days_since")) else None,
         "last_label": _no_short_date(cadence_row["last"]),
         "is_extra": pid not in baseline_ids,

@@ -1,7 +1,7 @@
 <tr {% if r.is_extra %}class="is-extra" title="Kommer fram fordi du utvidet et filter"{% endif %}>
   <td class="muted hide-sm">{{ r.category }}</td>
-  <td class="nowrap">
-    {{ r.key|capitalize }}
+  <td class="nowrap type-cell">
+    <span class="hide-sm">{{ r.key|capitalize }}</span>
     {% if r.is_added_variant %}
     <button type="button" class="remove-variant"
             onclick="this.closest('tr').remove(); window.minOdaRecount && window.minOdaRecount()"
@@ -38,6 +38,7 @@
     {% else %}
     {{ r.product_name }}
     {% endif %}
+    <span class="type-label">{{ r.key|capitalize }}</span>
   </td>
   {% if not new_list %}
   <td class="num muted hide-sm">{{ r.forslag }}</td>
@@ -60,8 +61,6 @@
       {% if r.unit_price is not none %}title="ca. {{ r.unit_price|format_kr }}/stk · sist betalt"{% endif %}>
     {% if r.unit_price is not none %}{{ r.line_cost|format_kr }}{% else %}–{% endif %}
   </td>
-  <td><span class="status status-{{ r.status|status_class }}"
-           title="Trengs {{ r.days_until_due|format_due }} · vanligvis hver {{ r.median }}. d">{{ r.status }}</span></td>
   {% if new_list %}
   <td class="muted nowrap hide-sm" title="{{ r.last_label }}">{{ r.days_since|format_days_ago }}</td>
   {% endif %}

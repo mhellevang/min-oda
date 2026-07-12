@@ -44,13 +44,14 @@ def test_route_returns_expected_status(client, path, expected):
     assert r.status_code == expected
 
 
-def test_handleliste_renders_filter_output(client):
-    """Filtrene format_due / status_class skal faktisk produsere output."""
+def test_handleliste_renders_uten_forfall(client):
+    """Forfall-kolonnen er fjernet, og sliderne bor i innstillings-panelet."""
     r = client.get("/handleliste")
     assert r.status_code == 200
     body = r.text
-    assert "status-" in body  # status_class filter
-    assert any(s in body for s in ("om ", "i dag", "siden"))  # format_due filter
+    assert "Forfall" not in body
+    assert "settings-panel" in body
+    assert 'name="cycle"' in body  # slider følger fortsatt med skjemaet
 
 
 def test_innsikt_renders_kpis(client):

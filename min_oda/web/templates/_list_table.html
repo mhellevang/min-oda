@@ -3,7 +3,7 @@
   <thead>
     <tr>
       <th class="hide-sm">Kategori</th>
-      <th>Varetype</th>
+      <th><span class="hide-sm">Varetype</span></th>
       <th aria-label="Bilde"></th>
       <th>Produkt</th>
       {% if new_list %}
@@ -14,7 +14,6 @@
       <th class="num">Mangler</th>
       {% endif %}
       <th class="num">Pris</th>
-      <th>Forfall</th>
       {% if new_list %}
       <th class="hide-sm">Sist kjøpt</th>
       {% endif %}
@@ -28,7 +27,7 @@
   </tbody>
   <tfoot>
     <tr class="total-row">
-      <td colspan="{{ 9 if new_list else 10 }}" class="num">
+      <td colspan="{{ 8 if new_list else 9 }}" class="num">
         Totalt (ca.) <strong id="list-total">{{ list_total|format_kr }}</strong>
       </td>
     </tr>
