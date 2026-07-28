@@ -23,6 +23,7 @@ from rich.table import Table
 
 from .blocklist import blocked_ids, blocked_types
 from .data_loader import load_both
+from .representatives import chosen_representatives
 from .oda_client import LIST_URL, add_products, build_client, create_list
 from .product_types import product_type
 from .restock import compute_cadence
@@ -76,6 +77,7 @@ def curate(
     max_per_category: int = 8,
     blocked: set[int] | frozenset[int] = frozenset(),
     blocked_types: set[str] | frozenset[str] = frozenset(),
+    chosen: dict[str, dict] | None = None,
     today: pd.Timestamp | None = None,
 ) -> pd.DataFrame:
     """Bygg handleliste basert på restock-kadens per varetype.
@@ -99,6 +101,11 @@ def curate(
     `blocked_types` er et sett av varetype-nøkler (samme som `key`-kolonnen)
     som utelates helt fra forslagene — i motsetning til `blocked`, der en
     annen variant kan overta, forsvinner hele varetypen.
+
+    `chosen` er valgte representanter (varetype-nøkkel → snapshot, jf.
+    `representatives.chosen_representatives`) — de overstyrer
+    mest-kjøpt-valget for sin varetype, typisk med en katalogvare som
+    aldri er kjøpt.
 
     `today` videresendes til `compute_cadence` slik at tester kan ankre
     abandon/forfall-tersklene til en fast dato. None betyr nå.
@@ -141,6 +148,15 @@ def curate(
     )
 
     out = cadence.drop(columns=["product_name", "category"]).merge(rep, on="key")
+
+    # Valgt representant vinner over mest-kjøpt. Kategorien beholdes fra
+    # den historiske representanten (brukes bare til prioritering).
+    if chosen:
+        for i in out.index:
+            c = chosen.get(str(out.at[i, "key"]))
+            if c:
+                out.at[i, "product_id"] = int(c["product_id"])
+                out.at[i, "product_name"] = c.get("name") or out.at[i, "product_name"]
 
     # Antall = forventet forbruk over sykluslengden:
     #   cycle × (snitt-kvantitet per besøk) / median-intervall.
@@ -233,6 +249,7 @@ def main() -> None:
         max_per_category=args.max_per_category,
         blocked=blocked_ids(),
         blocked_types=blocked_types(),
+        chosen=chosen_representatives(),
     )
     show(curated, cycle=args.cycle)
 

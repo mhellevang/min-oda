@@ -49,6 +49,13 @@
                hx-include="closest form"
                hx-target="#table-wrap" hx-swap="innerHTML">
       </label>
+      <button type="button" class="oda-sok-btn"
+              hx-get="/handleliste/oda-sok"
+              hx-include="[name='search']"
+              hx-target="#oda-sok-general" hx-swap="innerHTML"
+              title="Søk i hele Oda-katalogen, også varer du aldri har kjøpt">
+        Søk hos Oda
+      </button>
       <details class="settings">
         <summary title="Innstillinger" aria-label="Innstillinger">⚙</summary>
         <div class="settings-panel">
@@ -100,6 +107,8 @@
     <div id="table-and-blocked">
       {% include "_handleliste_body.html" %}
     </div>
+
+    <div id="oda-sok-general"></div>
 
     <div class="create-row">
       {% if new_list %}

@@ -82,3 +82,10 @@ def test_handles_empty_name():
     """Tomt navn skal ikke krasje — vi faller bare gjennom til kategori-fallback."""
     assert product_type("", "Frukt og grønt") == "frukt-grønt-annet"
     assert product_type("", "Ukjent") is None
+
+
+def test_buksebleier_er_bleier():
+    """«buksebleier» mangler ordgrense foran «bleie» — regexen skal
+    likevel treffe, med størrelses-suffiks som vanlig."""
+    assert product_type("R Lev Vel buksebleier Str. 6, 16-26 kg", "Baby og barn") == "bleier-str6"
+    assert product_type("Libero Touch buksebleier Str. 5, 10-14 kg", "Bleier") == "bleier-str5"

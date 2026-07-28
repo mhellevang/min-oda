@@ -708,6 +708,117 @@
       border-color: var(--rule);
       background: var(--warn-soft);
     }
+    /* Bytt-vare (⇄) og fjern-valg (↩), søsken til .hide-btn */
+    .swap-btn, .unchoose-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--muted);
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+      font-family: inherit;
+    }
+    tr:hover .swap-btn, tr:hover .unchoose-btn { color: var(--ink); }
+    .swap-btn:hover, .unchoose-btn:hover {
+      color: var(--accent);
+      border-color: var(--rule);
+      background: var(--accent-soft);
+    }
+    .chosen-badge {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      padding: 1px 5px;
+      margin-left: 6px;
+      white-space: nowrap;
+    }
+    /* Katalogsøk hos Oda: knapp i søkeraden + trefflister */
+    .oda-sok-btn, .bytt-lukk {
+      font-size: 13px;
+      padding: 8px 12px;
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--muted);
+      cursor: pointer;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+    .oda-sok-btn:hover, .bytt-lukk:hover {
+      color: var(--ink);
+      border-color: var(--accent);
+    }
+    .oda-sok-heading {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      margin: 18px 0 8px;
+    }
+    .oda-sok-results {
+      list-style: none;
+      margin: 8px 0 0;
+      padding: 0;
+      display: grid;
+      gap: 6px;
+    }
+    .oda-sok-results li {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 8px;
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      background: var(--card);
+      font-size: 14px;
+    }
+    .oda-sok-results img, .oda-sok-noimg {
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
+      flex: none;
+    }
+    .oda-sok-name { flex: 1; }
+    .oda-sok-action {
+      font-size: 12px;
+      padding: 5px 10px;
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--muted);
+      cursor: pointer;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+    .oda-sok-action:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .bytt-row > td { padding: 10px; background: var(--accent-soft); }
+    .bytt-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .bytt-head input {
+      flex: 1;
+      font-size: 14px;
+      padding: 8px 10px;
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--ink);
+      font-family: inherit;
+    }
     /* Miniatyrbilde på handlelista — hvit bakgrunn siden Odas produktfoto
        er frilagt på hvitt og ellers flyter ut i mørk modus. */
     td.thumb { width: 44px; padding-top: 2px; padding-bottom: 2px; }

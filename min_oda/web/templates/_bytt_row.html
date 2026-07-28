@@ -1,0 +1,22 @@
+{# Byttepanel under en handleliste-rad: søk i Oda-katalogen og velg en
+   fast representant for varetypen. Settes inn med hx-swap="afterend" og
+   fjernes lokalt med Lukk (eller implisitt når tabellen re-rendres). #}
+<tr class="bytt-row">
+  <td colspan="99">
+    <div class="bytt-panel">
+      <div class="bytt-head">
+        <strong>Bytt {{ key|capitalize }}</strong>
+        <input type="search" name="q" value="{{ q }}"
+               placeholder="Søk i Oda-katalogen (også varer du aldri har kjøpt)"
+               hx-get="/handleliste/oda-sok"
+               hx-trigger="keyup changed delay:400ms"
+               hx-vals='{"key": {{ key|tojson }}}'
+               hx-target="next .oda-sok-wrap" hx-swap="innerHTML">
+        <button type="button" class="bytt-lukk"
+                onclick="this.closest('tr').remove()"
+                title="Lukk byttepanelet">Lukk</button>
+      </div>
+      <div class="oda-sok-wrap">{% include "_oda_sok.html" %}</div>
+    </div>
+  </td>
+</tr>

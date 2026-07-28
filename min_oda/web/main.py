@@ -18,6 +18,7 @@ from pathlib import Path
 from time import time
 from urllib.parse import quote, urlencode
 
+import httpx
 import pandas as pd
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -27,7 +28,7 @@ from fastapi.templating import Jinja2Templates
 import math
 
 from . import auth
-from .. import blocklist
+from .. import blocklist, representatives
 from ..build_list import curate
 from ..cart_diff import compute_diff, fetch_cart
 from ..data_loader import load_both
@@ -40,6 +41,7 @@ from ..oda_client import (
     add_to_cart,
     build_client,
     create_list,
+    search_products,
 )
 from ..restock import compute_cadence
 from ..variants import variants_for_type
@@ -341,6 +343,7 @@ def get_baseline_ids() -> set[int]:
             max_per_category=DEFAULT_MAX_PER_CAT,
             blocked=blocklist.blocked_ids(),
             blocked_types=blocklist.blocked_types(),
+            chosen=representatives.chosen_representatives(),
         )
         _BASELINE_IDS = (
             {int(x) for x in baseline["product_id"]}
@@ -354,6 +357,14 @@ def invalidate_blocklist_caches() -> None:
     """Etter en blokk/avblokk er baseline ikke lenger riktig."""
     global _BASELINE_IDS
     _BASELINE_IDS = None
+
+
+def invalidate_representative_caches() -> None:
+    """Etter velg/fjern representant. Kadensen må også nullstilles:
+    pinningen kan omklassifisere et produkt som finnes i historikken."""
+    global _BASELINE_IDS, _CADENCE_BY_TYPE
+    _BASELINE_IDS = None
+    _CADENCE_BY_TYPE = None
 
 
 def _mode_urls(
@@ -423,6 +434,7 @@ def _build_row_dict(
     price_map: dict[int, float] | None = None,
     image_map: dict[int, str] | None = None,
     is_added_variant: bool = False,
+    is_chosen: bool = False,
 ) -> dict:
     """Bygg rad-dict klar for `_list_row.html`, gitt en cadence-rad
     (typenivå) og en konkret pid + navn. Brukes både av hovedtabellen og
@@ -458,6 +470,7 @@ def _build_row_dict(
         "last_label": _no_short_date(cadence_row["last"]),
         "is_extra": pid not in baseline_ids,
         "is_added_variant": is_added_variant,
+        "is_chosen": is_chosen,
         "variants": variants,
     }
 
@@ -471,10 +484,12 @@ def _build_rows(
     new_list: bool,
     top_up: bool,
 ) -> tuple[list[dict], int, int]:
+    chosen = representatives.chosen_representatives()
     ideal = curate(
         lines, list_cycle_days=cycle, top_n=top, max_per_category=max_per_cat,
         blocked=blocklist.blocked_ids(),
         blocked_types=blocklist.blocked_types(),
+        chosen=chosen,
     )
     if ideal.empty:
         return [], 0, 0
@@ -482,6 +497,17 @@ def _build_rows(
     baseline_ids = get_baseline_ids()
     price_map = get_price_map()
     image_map = get_image_map()
+    if chosen:
+        # Katalogvarer finnes ikke i historikken — bruk snapshotet fra
+        # søketreffet. setdefault: en ekte sist-betalt-pris vinner.
+        price_map = dict(price_map)
+        image_map = dict(image_map)
+        for c in chosen.values():
+            pid = int(c["product_id"])
+            if c.get("price") is not None:
+                price_map.setdefault(pid, float(c["price"]))
+            if c.get("image"):
+                image_map.setdefault(pid, str(c["image"]))
 
     cart_total = 0
     cart: pd.DataFrame | None = None
@@ -503,7 +529,13 @@ def _build_rows(
     extra_count = 0
     for _, r in ideal.iterrows():
         pid = int(r["product_id"])
-        variants = _variants_for_row(lines, str(r["key"]))
+        key = str(r["key"])
+        is_chosen = (
+            key in chosen and int(chosen[key]["product_id"]) == pid
+        )
+        # Valgt representant: ingen variant-dropdown — katalogvaren
+        # finnes ikke blant de historiske variantene.
+        variants = [] if is_chosen else _variants_for_row(lines, key)
         row = _build_row_dict(
             cadence_row=r,
             pid=pid,
@@ -516,6 +548,7 @@ def _build_rows(
             variants=variants,
             price_map=price_map,
             image_map=image_map,
+            is_chosen=is_chosen,
         )
         if row["is_extra"]:
             extra_count += 1
@@ -759,6 +792,103 @@ async def handleliste_unblock_type(request: Request) -> HTMLResponse:
         return HTMLResponse("Mangler varetype", status_code=400)
     blocklist.unblock_type(key)
     invalidate_blocklist_caches()
+    return await _render_body_after_block_change(request)
+
+
+def _oda_search_ctx(query: str, key: str = "") -> dict:
+    """Felles kontekst for _oda_sok.html: søk i Oda-katalogen med vennlig
+    feilhåndtering. `price_str` prekalkuleres fordi hx-vals-attributtet
+    ikke kan romme Jinja-uttrykk med apostrofer."""
+    results: list[dict] = []
+    error: str | None = None
+    if query:
+        try:
+            results = search_products(query)
+        except httpx.HTTPError as e:
+            error = str(e)
+    for p in results:
+        p["price_str"] = "" if p["price"] is None else f"{p['price']:.2f}"
+    return {"results": results, "q": query, "key": key, "error": error}
+
+
+@app.get("/handleliste/oda-sok", response_class=HTMLResponse)
+def handleliste_oda_sok(
+    request: Request, q: str = "", search: str = "", key: str = ""
+) -> HTMLResponse:
+    """Katalogsøk hos Oda. Uten `key`: engangsmodus, treff får
+    legg-i-kurv-knapp. Med `key`: byttemodus, treff får velg-knapp som
+    gjør produktet til fast representant for varetypen."""
+    query = (q or search).strip()
+    return templates.TemplateResponse(
+        request, "_oda_sok.html", _oda_search_ctx(query, key)
+    )
+
+
+@app.get("/handleliste/bytt", response_class=HTMLResponse)
+def handleliste_bytt(request: Request, key: str) -> HTMLResponse:
+    """Åpne et byttepanel under en rad: katalogsøk forhåndsutfylt med
+    varetypens basenavn, der treff kan velges som fast representant."""
+    query = key.split("-", 1)[0]
+    return templates.TemplateResponse(
+        request, "_bytt_row.html", _oda_search_ctx(query, key)
+    )
+
+
+@app.post("/handleliste/kurv-en", response_class=HTMLResponse)
+async def handleliste_kurv_en(request: Request) -> HTMLResponse:
+    """Legg én katalogvare rett i Oda-kurven (engangsvare)."""
+    form = await request.form()
+    try:
+        pid = int(str(form.get("product_id") or ""))
+    except ValueError:
+        return HTMLResponse("Ugyldig product_id", status_code=400)
+    try:
+        client = build_client()
+    except MissingCredentials as e:
+        return HTMLResponse(f'<span class="muted">Mangler innlogging: {e}</span>')
+    after, err = add_to_cart(client, [(pid, 1)])
+    if err:
+        return HTMLResponse(f'<span class="muted">Feil: {err}</span>')
+    invalidate_cart_cache()
+    if after.get(pid, 0) < 1:
+        return HTMLResponse(
+            '<span class="muted">Kom ikke i kurven (utsolgt?)</span>'
+        )
+    return HTMLResponse('<span class="muted">✓ i kurven</span>')
+
+
+@app.post("/handleliste/velg-representant", response_class=HTMLResponse)
+async def handleliste_velg_representant(request: Request) -> HTMLResponse:
+    """Gjør en katalogvare til fast representant for varetypen (jf.
+    representatives.choose) og re-rendre tabellen."""
+    form = await request.form()
+    key = str(form.get("key") or "").strip()
+    if not key:
+        return HTMLResponse("Mangler varetype", status_code=400)
+    try:
+        pid = int(str(form.get("product_id") or ""))
+    except ValueError:
+        return HTMLResponse("Ugyldig product_id", status_code=400)
+    price_raw = str(form.get("price") or "").strip()
+    representatives.choose(
+        key,
+        pid,
+        name=str(form.get("name") or ""),
+        price=float(price_raw) if price_raw else None,
+        image=str(form.get("image") or ""),
+    )
+    invalidate_representative_caches()
+    return await _render_body_after_block_change(request)
+
+
+@app.post("/handleliste/fjern-representant", response_class=HTMLResponse)
+async def handleliste_fjern_representant(request: Request) -> HTMLResponse:
+    form = await request.form()
+    key = str(form.get("key") or "").strip()
+    if not key:
+        return HTMLResponse("Mangler varetype", status_code=400)
+    representatives.unchoose(key)
+    invalidate_representative_caches()
     return await _render_body_after_block_change(request)
 
 

@@ -14,6 +14,7 @@ Oda-endepunkter vi snakker med:
   GET  /api/v1/product-lists/                      — egne lister
   POST /api/v1/product-lists/                      — opprett liste
   POST /api/v1/product-lists/<id>/products/        — legg til varer i liste
+  GET  /api/v1/search/mixed/?q=<søk>               — katalogsøk (åpent, uten innlogging)
 """
 
 from __future__ import annotations
@@ -246,6 +247,49 @@ def add_products(
         return len(items)
     console.print(f"  [red]{r.status_code}[/red] {r.text[:200]}")
     return 0
+
+
+SEARCH_URL = "https://oda.com/api/v1/search/mixed/"
+
+
+def search_products(query: str, limit: int = 12) -> list[dict]:
+    """Søk i Odas katalog. Endepunktet er åpent, så ingen autentisert
+    klient trengs. Returnerer tilgjengelige produkter som dicts med
+    product_id, name, price (kr eller None) og image (thumbnail-URL
+    eller None). Ikke-produkter (kategorier, kampanjer) og utsolgte
+    varer filtreres bort."""
+    r = httpx.get(
+        SEARCH_URL,
+        params={"q": query},
+        headers={"User-Agent": DEFAULT_USER_AGENT, "Accept": "application/json"},
+        timeout=15.0,
+    )
+    r.raise_for_status()
+    out: list[dict] = []
+    for item in r.json().get("items", []):
+        if item.get("type") != "product":
+            continue
+        a = item.get("attributes") or {}
+        if not (a.get("availability") or {}).get("is_available", True):
+            continue
+        images = a.get("images") or []
+        image = None
+        if images:
+            image = ((images[0].get("thumbnail") or {}).get("url")
+                     or (images[0].get("large") or {}).get("url"))
+        try:
+            price = float(a["gross_price"])
+        except (KeyError, TypeError, ValueError):
+            price = None
+        out.append({
+            "product_id": int(a["id"]),
+            "name": a.get("full_name") or a.get("name") or "",
+            "price": price,
+            "image": image,
+        })
+        if len(out) >= limit:
+            break
+    return out
 
 
 CART_ITEMS_URL = "https://oda.com/api/v1/cart/items/"

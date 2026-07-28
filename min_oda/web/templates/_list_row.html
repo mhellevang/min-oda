@@ -38,6 +38,9 @@
     {% else %}
     {{ r.product_name }}
     {% endif %}
+    {% if r.is_chosen %}
+    <span class="chosen-badge" title="Fast valgt: overstyrer mest kjøpte variant til du fjerner valget (↩)">valgt</span>
+    {% endif %}
     <span class="type-label">{{ r.key|capitalize }}</span>
   </td>
   {% if not new_list %}
@@ -65,6 +68,20 @@
   <td class="muted nowrap hide-sm" title="{{ r.last_label }}">{{ r.days_since|format_days_ago }}</td>
   {% endif %}
   <td class="row-actions nowrap">
+    {% if r.is_chosen %}
+    <button type="button" class="unchoose-btn"
+            hx-post="/handleliste/fjern-representant"
+            hx-vals='{"key": {{ r.key|tojson }}}'
+            hx-include="closest form"
+            hx-target="#table-and-blocked" hx-swap="innerHTML"
+            title="Fjern det faste valget for {{ r.key }} (gå tilbake til mest kjøpte variant)">↩</button>
+    {% else %}
+    <button type="button" class="swap-btn"
+            hx-get="/handleliste/bytt"
+            hx-vals='{"key": {{ r.key|tojson }}}'
+            hx-target="closest tr" hx-swap="afterend"
+            title="Bytt til en vare fra Oda-katalogen (også varer du aldri har kjøpt)">⇄</button>
+    {% endif %}
     <button type="button" class="hide-btn"
             hx-post="/handleliste/block"
             hx-vals='{"product_id": {{ r.product_id|tojson }}, "name": {{ r.product_name|tojson }}}'

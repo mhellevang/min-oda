@@ -44,6 +44,7 @@ All analysis modules accept DataFrames from `data_loader.load_both()` and return
 - `restock.py:compute_cadence(lines, by_type=True)` — for each product (or varetype), computes median interval between purchases, `days_since`, `days_until_due`, status (forfalt/snart/i rute), and CV. Drops abandoned products (`days_since > median * abandon_factor`) and rare ones (`median > 90 d`). The `by_type=True` path is the foundation for both shopping-list features.
 - `build_list.py:curate(lines, list_cycle_days, top_n, max_per_category, blocked)` — picks the *most-bought* product as the representative for each cadence-stable varetype, computes `foreslått_antall = ceil(cycle / median)`, applies category priority + caps. The blocklist filters out specific `product_id`s while leaving the varetype available (another variant can step in).
 - `cart_diff.py:compute_diff(ideal, cart, top_up)` — joins curated list against the live cart *by varetype, not product_id*. Default returns only varetypes missing from the cart. `top_up=True` also includes those with too-low quantity.
+- `representatives.py` — valgt representant per varetype i `data/chosen_products.json` (gitignored): brukeren kan peke ut en katalogvare (aldri kjøpt) som fast forslag for en varetype. `chosen_representatives()` mates inn i `curate(chosen=)` og overstyrer mest-kjøpt-valget til det fjernes; `pinned_types()` konsulteres av `product_type()` så det valgte produktet klassifiseres til varetypen det ble valgt for (fremtidige kjøp teller i riktig kadens). Snapshot av navn/pris/bilde lagres fra søketreffet siden varen ikke finnes i CSV-ene.
 - `blocklist.py` — to JSON-backede blokklister. Produktnivå i `data/blocklist.json` (`block(pid)` / `unblock(pid)` / `blocked_ids()` / `list_blocked()`) blokkerer én variant, så en annen variant av samme varetype kan overta. Varetypenivå i `data/blocked_types.json` (`block_type(key)` / `unblock_type(key)` / `blocked_types()` / `list_blocked_types()`) skjuler hele varetypen fra forslag. `curate()` tar begge (`blocked=` og `blocked_types=`).
 
 ### Web app (`min_oda/web/`)
@@ -58,7 +59,7 @@ FastAPI + Jinja2 + HTMX. Two pages:
 
 State is cached in module-level globals (`_ORDERS`, `_LINES`, `_CART`, `_BASKET_CACHE`, `_BASELINE_IDS`). `invalidate_caches()` resets all of them and is called after a successful `POST /refresh`; `invalidate_blocklist_caches()` resets only the baseline ids after a block/unblock. The cart has its own 120 s TTL.
 
-HTMX endpoints (`/handleliste/table`, `/handleliste/block`, `/handleliste/unblock`, `/innsikt/basket-lookup`) return template fragments (files prefixed with `_`).
+HTMX endpoints (`/handleliste/table`, `/handleliste/block`, `/handleliste/unblock`, `/handleliste/oda-sok`, `/handleliste/bytt`, `/handleliste/kurv-en`, `/handleliste/velg-representant`, `/handleliste/fjern-representant`, `/innsikt/basket-lookup`) return template fragments (files prefixed with `_`). Katalogsøket har to innganger: «Søk hos Oda»-knappen ved søkefeltet (engangsvarer, legg-i-kurv) og ⇄-knappen på hver rad (byttepanel som setter valgt representant for radens varetype).
 
 The CLI entrypoint is `min_oda.web.cli:run` (registered in `pyproject.toml` as `[project.scripts] min-oda`). It just wraps `uvicorn.run(...)`.
 
@@ -71,6 +72,8 @@ Everything under `data/` is gitignored except `product_types.json`. Don't commit
 `tests/conftest.py` builds synthetic `lines` DataFrames anchored to a fixed `TODAY = 2026-05-14` so cadence thresholds (abandon, max_median, status) are deterministic. When adding new cadence/curation rules, add a fixture rather than mutating an existing one.
 
 ## Talking to Oda
+
+`GET /api/v1/search/mixed/?q=<søk>` er katalogsøket — åpent, ingen innlogging. Items har `type` (`product`/`category`/…) og `attributes` med `id`, `full_name`, `gross_price`, `availability.is_available` og `images` (bekreftet juli 2026). `oda_client.search_products()` wrapper det.
 
 `POST /api/v1/product-lists/<id>/products/` aksepterer payload på formen `[{"product_id": <id>, "quantity": <n>}, ...]` (bekreftet ved test mai 2026). Endepunktet er udokumentert, så hvis Oda endrer kontrakten må vi prøve oss frem på nytt.
 

@@ -34,7 +34,7 @@ def _explicit_mapping() -> dict[int, str]:
 # Reglene matches mot lowercase produktnavn.
 _KEYWORD_RULES: list[tuple[re.Pattern[str], str]] = [
     # Baby — sjekk først så "babymat" ikke trigges av annet
-    (re.compile(r"\bbleie"), "bleier"),
+    (re.compile(r"bleie"), "bleier"),  # ingen \b — «buksebleier» er også bleier
     (re.compile(r"våtserviett"), "våtservietter"),
     (re.compile(r"stellekluter"), "stellekluter"),
     (re.compile(r"morsmelkerstat|\bnan\b|sensilac|nan pro|nan 1|nan 2"), "morsmelkerstatning"),
@@ -311,6 +311,14 @@ def product_type(name: str | None, category: str | None = None,
     base: str | None = None
 
     if product_id is not None:
+        # Valgt representant (jf. representatives.choose) pinner produktet
+        # til varetypen det ble valgt for. Nøkkelen er komplett (inkl.
+        # ev. størrelses-suffiks), så returner direkte.
+        from .representatives import pinned_types
+
+        pinned = pinned_types().get(int(product_id))
+        if pinned:
+            return pinned
         base = _explicit_mapping().get(int(product_id))
 
     if base is None and name:
