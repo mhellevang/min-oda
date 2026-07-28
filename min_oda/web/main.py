@@ -28,7 +28,7 @@ from fastapi.templating import Jinja2Templates
 import math
 
 from . import auth
-from .. import blocklist, representatives
+from .. import blocklist, engangsvarer, representatives
 from ..build_list import curate
 from ..cart_diff import compute_diff, fetch_cart
 from ..data_loader import load_both
@@ -399,11 +399,14 @@ def _foreslag_for(cadence_row: pd.Series, cycle: int) -> int:
     return max(1, math.ceil(cycle * float(cadence_row["avg_qty_per_event"]) / median))
 
 
-def _cart_qty_for(cart: pd.DataFrame, pid: int) -> int:
-    """Sum quantity for produkt-id-en i kurven (0 hvis ikke der)."""
+def _cart_qty_for(cart: pd.DataFrame, key: str) -> int:
+    """Sum antall i kurven for varetypen (0 hvis ingen variant er der).
+    Teller per varetype, ikke per produkt-id — samme semantikk som
+    compute_diff, så en substituerende variant (buksebleier for bleier)
+    regnes som dekning."""
     if cart.empty:
         return 0
-    sub = cart[cart["product_id"].astype(int) == pid]
+    sub = cart[cart["_type"] == key]
     if sub.empty:
         return 0
     return int(sub["quantity"].sum())
@@ -449,7 +452,9 @@ def _build_row_dict(
         mangler = None
         default_qty = forslag
     else:
-        i_kurv = _cart_qty_for(cart if cart is not None else _EMPTY_CART, pid)
+        i_kurv = _cart_qty_for(
+            cart if cart is not None else _EMPTY_CART, str(cadence_row["key"])
+        )
         mangler = max(0, forslag - i_kurv)
         default_qty = mangler
     unit_price = (price_map or {}).get(pid)
@@ -475,6 +480,54 @@ def _build_row_dict(
     }
 
 
+def _engangs_rows(
+    search: str, new_list: bool, cart: pd.DataFrame | None,
+    price_map: dict[int, float],
+) -> list[dict]:
+    """Rader for engangsvarer fra katalogsøket (jf. engangsvarer.py).
+    Ingen kadens — antallet er det brukeren har lagt inn lokalt. Sist
+    betalt pris vinner over søketreff-snapshotet, som for representanter."""
+    rows: list[dict] = []
+    for item in engangsvarer.list_items():
+        if search and search.lower() not in item["name"].lower():
+            continue
+        pid = item["product_id"]
+        qty = item["qty"]
+        if new_list:
+            i_kurv = None
+            mangler = None
+            default_qty = qty
+        else:
+            c = cart if cart is not None else _EMPTY_CART
+            sub = c[c["product_id"].astype(int) == pid] if not c.empty else c
+            i_kurv = 0 if sub.empty else int(sub["quantity"].sum())
+            mangler = max(0, qty - i_kurv)
+            default_qty = mangler
+        price = price_map.get(pid, item["price"])
+        unit_price = float(price) if price is not None else None
+        rows.append({
+            "product_id": pid,
+            "image": item["image"] or None,
+            "unit_price": unit_price,
+            "line_cost": unit_price * default_qty if unit_price is not None else None,
+            "category": "",
+            "key": "engangs",
+            "product_name": item["name"],
+            "forslag": qty,
+            "i_kurv": i_kurv,
+            "mangler": mangler,
+            "qty": default_qty,
+            "days_since": None,
+            "last_label": "",
+            "is_extra": False,
+            "is_added_variant": False,
+            "is_chosen": False,
+            "is_engangs": True,
+            "variants": [],
+        })
+    return rows
+
+
 def _build_rows(
     lines: pd.DataFrame,
     cycle: int,
@@ -492,7 +545,10 @@ def _build_rows(
         chosen=chosen,
     )
     if ideal.empty:
-        return [], 0, 0
+        # Engangsvarer skal vises selv uten kadens-kandidater.
+        cart = get_cart() if not new_list else None
+        cart_total = int(cart["quantity"].sum()) if cart is not None and not cart.empty else 0
+        return _engangs_rows(search, new_list, cart, get_price_map()), cart_total, 0
 
     baseline_ids = get_baseline_ids()
     price_map = get_price_map()
@@ -553,6 +609,7 @@ def _build_rows(
         if row["is_extra"]:
             extra_count += 1
         rows.append(row)
+    rows.extend(_engangs_rows(search, new_list, cart, price_map))
     return rows, cart_total, extra_count
 
 
@@ -834,27 +891,34 @@ def handleliste_bytt(request: Request, key: str) -> HTMLResponse:
     )
 
 
-@app.post("/handleliste/kurv-en", response_class=HTMLResponse)
-async def handleliste_kurv_en(request: Request) -> HTMLResponse:
-    """Legg én katalogvare rett i Oda-kurven (engangsvare)."""
+@app.post("/handleliste/engangs-legg-til", response_class=HTMLResponse)
+async def handleliste_engangs_legg_til(request: Request) -> HTMLResponse:
+    """Legg en katalogvare på den lokale handlelista som engangsvare.
+    Ingenting sendes til Oda før bulk-posten (legg i kurv / send liste)."""
     form = await request.form()
     try:
         pid = int(str(form.get("product_id") or ""))
     except ValueError:
         return HTMLResponse("Ugyldig product_id", status_code=400)
+    price_raw = str(form.get("price") or "").strip()
+    engangsvarer.add(
+        pid,
+        name=str(form.get("name") or ""),
+        price=float(price_raw) if price_raw else None,
+        image=str(form.get("image") or ""),
+    )
+    return await _render_body_after_block_change(request)
+
+
+@app.post("/handleliste/engangs-fjern", response_class=HTMLResponse)
+async def handleliste_engangs_fjern(request: Request) -> HTMLResponse:
+    form = await request.form()
     try:
-        client = build_client()
-    except MissingCredentials as e:
-        return HTMLResponse(f'<span class="muted">Mangler innlogging: {e}</span>')
-    after, err = add_to_cart(client, [(pid, 1)])
-    if err:
-        return HTMLResponse(f'<span class="muted">Feil: {err}</span>')
-    invalidate_cart_cache()
-    if after.get(pid, 0) < 1:
-        return HTMLResponse(
-            '<span class="muted">Kom ikke i kurven (utsolgt?)</span>'
-        )
-    return HTMLResponse('<span class="muted">✓ i kurven</span>')
+        pid = int(str(form.get("product_id") or ""))
+    except ValueError:
+        return HTMLResponse("Ugyldig product_id", status_code=400)
+    engangsvarer.remove(pid)
+    return await _render_body_after_block_change(request)
 
 
 @app.post("/handleliste/velg-representant", response_class=HTMLResponse)
@@ -985,6 +1049,7 @@ async def handleliste_create(request: Request) -> HTMLResponse:
         )
     list_id = result["id"]
     ok = add_products(client, list_id, items)
+    engangsvarer.remove_posted(pid for pid, _ in items)
     return HTMLResponse(
         f'<div class="alert ok">La til {ok}/{len(items)} varer. '
         f'<a href="https://oda.com/no/account/lists/details/{list_id}/" '
@@ -1038,6 +1103,12 @@ async def handleliste_add_to_cart(request: Request) -> HTMLResponse:
         if actual < requested:
             shortfalls.append((pid, requested, max(actual, 0)))
 
+    # Engangsvarer som kom helt i kurven er ferdige — de som ble cappet
+    # (utsolgt e.l.) blir stående på lista.
+    engangsvarer.remove_posted(
+        {pid for pid, _ in items} - {s[0] for s in shortfalls}
+    )
+
     requested_total = sum(q for _, q in items)
     cart_url = '<a href="https://oda.com/no/cart/" target="_blank">Åpne kurven →</a>'
 
@@ -1054,6 +1125,8 @@ async def handleliste_add_to_cart(request: Request) -> HTMLResponse:
         .set_index("product_id")["product_name"]
         .to_dict()
     )
+    for e in engangsvarer.list_items():
+        name_by_pid.setdefault(e["product_id"], e["name"])
     rows_html = "".join(
         f"<li>{name_by_pid.get(pid, f'#{pid}')}: "
         f"ba om {req}, fikk {act}</li>"

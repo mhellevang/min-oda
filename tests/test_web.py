@@ -62,6 +62,41 @@ def test_innsikt_renders_kpis(client):
 
 
 @pytest.fixture
+def isolated_engangs(tmp_path, monkeypatch):
+    """Pek engangsvare-fila mot tmp så ekte data ikke berøres."""
+    from min_oda import engangsvarer
+    monkeypatch.setattr(engangsvarer, "ENGANGS_PATH", tmp_path / "engangsvarer.json")
+    yield
+
+
+def test_engangsvare_legg_til_og_fjern(client, isolated_engangs):
+    """POST /handleliste/engangs-legg-til lagrer lokalt og raden dukker
+    opp i tabellen med fjern-knapp; engangs-fjern tar den bort igjen."""
+    from min_oda import engangsvarer
+
+    r = client.post(
+        "/handleliste/engangs-legg-til",
+        data={"product_id": "999999", "name": "Testvare grillkull",
+              "price": "79.90", "new_list": "true"},
+    )
+    assert r.status_code == 200
+    assert "Testvare grillkull" in r.text
+    assert "engangs-fjern" in r.text
+    assert engangsvarer.list_items()[0]["qty"] == 1
+
+    body = client.get("/handleliste?new_list=true").text
+    assert "Testvare grillkull" in body
+
+    r = client.post(
+        "/handleliste/engangs-fjern",
+        data={"product_id": "999999", "new_list": "true"},
+    )
+    assert r.status_code == 200
+    assert "Testvare grillkull" not in r.text
+    assert engangsvarer.list_items() == []
+
+
+@pytest.fixture
 def isolated_blocklist(tmp_path, monkeypatch):
     """Pek block-filene mot tmp så ekte data ikke berøres."""
     from min_oda import blocklist

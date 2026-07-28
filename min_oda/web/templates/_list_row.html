@@ -2,7 +2,8 @@
   <td class="muted hide-sm">{{ r.category }}</td>
   <td class="nowrap type-cell">
     <span class="hide-sm">{{ r.key|capitalize }}</span>
-    {% if r.is_added_variant %}
+    {% if r.is_engangs %}
+    {% elif r.is_added_variant %}
     <button type="button" class="remove-variant"
             onclick="this.closest('tr').remove(); window.minOdaRecount && window.minOdaRecount()"
             title="Fjern denne varianten fra listen">−</button>
@@ -68,7 +69,14 @@
   <td class="muted nowrap hide-sm" title="{{ r.last_label }}">{{ r.days_since|format_days_ago }}</td>
   {% endif %}
   <td class="row-actions nowrap">
-    {% if r.is_chosen %}
+    {% if r.is_engangs %}
+    <button type="button" class="hide-btn"
+            hx-post="/handleliste/engangs-fjern"
+            hx-vals='{"product_id": {{ r.product_id|tojson }}}'
+            hx-include="closest form"
+            hx-target="#table-and-blocked" hx-swap="innerHTML"
+            title="Fjern engangsvaren fra lista">×</button>
+    {% elif r.is_chosen %}
     <button type="button" class="unchoose-btn"
             hx-post="/handleliste/fjern-representant"
             hx-vals='{"key": {{ r.key|tojson }}}'
@@ -82,6 +90,7 @@
             hx-target="closest tr" hx-swap="afterend"
             title="Bytt til en vare fra Oda-katalogen (også varer du aldri har kjøpt)">⇄</button>
     {% endif %}
+    {% if not r.is_engangs %}
     <button type="button" class="hide-btn"
             hx-post="/handleliste/block"
             hx-vals='{"product_id": {{ r.product_id|tojson }}, "name": {{ r.product_name|tojson }}}'
@@ -94,5 +103,6 @@
             hx-include="closest form"
             hx-target="#table-and-blocked" hx-swap="innerHTML"
             title="Skjul hele varetypen «{{ r.key }}» fra forslag (ingen variant overtar).">⊘</button>
+    {% endif %}
   </td>
 </tr>
