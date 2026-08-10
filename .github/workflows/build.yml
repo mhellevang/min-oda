@@ -14,9 +14,6 @@ concurrency:
   group: build-image
   cancel-in-progress: false
 
-env:
-  IMAGE: ghcr.io/mhellevang/min-oda
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -25,6 +22,11 @@ jobs:
       packages: write   # push til GHCR med den innebygde GITHUB_TOKEN
     steps:
       - uses: actions/checkout@v4
+
+      # Imagenavn utledes av repoet, så forks bygger til sitt eget GHCR-navnerom
+      # uten endringer her. GHCR krever små bokstaver.
+      - name: Sett imagenavn
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'   # kun nødvendig for push
@@ -42,7 +44,7 @@ jobs:
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}   # PR-er bygger kun, pusher ikke
-          platforms: linux/amd64   # TrueNAS SCALE er x86_64
+          platforms: linux/amd64,linux/arm64   # x86-servere + ARM (Pi, Apple Silicon)
           tags: |
             ${{ env.IMAGE }}:latest
             ${{ env.IMAGE }}:${{ github.sha }}

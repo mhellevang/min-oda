@@ -14,7 +14,8 @@
 
 services:
   min-oda:
-    image: ghcr.io/mhellevang/min-oda:latest
+    # Overstyr med ODA_IMAGE i .env ved fork (CI bygger ghcr.io/<bruker>/<repo>).
+    image: ${ODA_IMAGE:-ghcr.io/mhellevang/min-oda:latest}
     restart: unless-stopped
     env_file: .env
     volumes:
