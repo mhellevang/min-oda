@@ -8,8 +8,10 @@
         <strong>Bytt {{ key|capitalize }}</strong>
         <input type="search" name="q" value="{{ q }}"
                placeholder="Søk i Oda-katalogen (også varer du aldri har kjøpt)"
+               aria-label="Søk i Oda-katalogen"
+               autocomplete="off"
                hx-get="/handleliste/oda-sok"
-               hx-trigger="keyup changed delay:400ms"
+               hx-trigger="input changed delay:300ms"
                hx-vals='{"key": {{ key|tojson }}}'
                hx-target="next .oda-sok-wrap" hx-swap="innerHTML">
         <button type="button" class="bytt-lukk"

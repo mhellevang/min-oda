@@ -1,20 +1,20 @@
 {% extends "base.html" %}
-{% block title %}Handleliste — Oda-analyse{% endblock %}
+{% block title %}Handleliste · Min Oda{% endblock %}
 {% block content %}
 <h1>Handleliste</h1>
 
-<div class="mode-toggle" role="tablist" aria-label="Hva vil du gjøre">
+<nav class="mode-toggle" aria-label="Hva vil du gjøre">
   <a href="{{ url_diff }}"
      class="{% if not new_list %}active{% endif %}"
-     role="tab" aria-selected="{{ 'true' if not new_list else 'false' }}">
+     {% if not new_list %}aria-current="true"{% endif %}>
     🛒 Legg til handlekurv
   </a>
   <a href="{{ url_new_list }}"
      class="{% if new_list %}active{% endif %}"
-     role="tab" aria-selected="{{ 'true' if new_list else 'false' }}">
+     {% if new_list %}aria-current="true"{% endif %}>
     📋 Lagre som handleliste
   </a>
-</div>
+</nav>
 
 <p class="subtitle">
   {% if new_list %}
@@ -32,7 +32,8 @@
       data-mode="{{ 'new_list' if new_list else 'diff' }}"
       hx-post="{% if new_list %}/handleliste/create{% else %}/handleliste/add-to-cart{% endif %}"
       hx-target="#result"
-      hx-swap="innerHTML">
+      hx-swap="innerHTML"
+      hx-disabled-elt="#submit-btn">
 
   {# Skjemaet brukes for to ting: opprette ny handleliste (new_list=true)
      eller legge mangelvarer rett i kurven (new_list=false). hx-post over
@@ -42,10 +43,11 @@
   <section class="controls-section">
     <div class="search-row">
       <label class="search-field">Søk
-        <input type="text" name="search" value="{{ search }}"
+        <input type="search" name="search" value="{{ search }}"
                placeholder="f.eks. melk, brød, agurk"
+               autocomplete="off"
                hx-get="/handleliste/table"
-               hx-trigger="keyup changed delay:300ms"
+               hx-trigger="input changed delay:300ms"
                hx-include="closest form"
                hx-target="#table-wrap" hx-swap="innerHTML">
       </label>
@@ -113,15 +115,16 @@
     <div class="create-row">
       {% if new_list %}
       <input type="text" name="title"
-             value="Ukehandel — familien"
+             value="Ukehandel"
              required
              aria-label="Listenavn">
-      <button type="submit" class="primary">💾 Lagre på Oda</button>
+      <button type="submit" id="submit-btn" class="primary">💾 Lagre på Oda</button>
       {% else %}
-      <button type="submit" class="primary">🛒 Legg i handlekurv</button>
+      <button type="submit" id="submit-btn" class="primary">🛒 Legg i handlekurv</button>
       {% endif %}
+      <span class="htmx-indicator muted">sender …</span>
     </div>
-    <div id="result"></div>
+    <div id="result" aria-live="polite"></div>
   </section>
 </form>
 {% endblock %}

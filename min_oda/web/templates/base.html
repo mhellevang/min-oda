@@ -3,10 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>{% block title %}Oda-analyse{% endblock %}</title>
+  <meta name="theme-color" content="#fafaf8">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#16181c">
+  <title>{% block title %}Min Oda{% endblock %}</title>
   <script src="/static/htmx.min.js"></script>
   <style>
     :root {
+      color-scheme: light dark;
       --bg: #fafaf8;
       --card: #fff;
       --ink: #1a1a1a;
@@ -49,6 +52,10 @@
       .auth-banner button:hover { background: #b8443d; }
     }
     * { box-sizing: border-box; }
+    /* Slår av dobbelttapp-zoom-forsinkelsen på alle knapper (iOS). */
+    button, summary { touch-action: manipulation; }
+    /* Knapp som venter på svar (hx-disabled-elt) — dempet, ikke borte. */
+    button:disabled { opacity: 0.55; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
       margin: 0;
@@ -140,7 +147,6 @@
       width: 120px;
     }
     .bar { background: var(--accent); height: 100%; }
-    img.plot { width: 100%; height: auto; display: block; }
     .mode-toggle {
       display: inline-flex;
       border: 1px solid var(--rule);
@@ -347,9 +353,14 @@
       letter-spacing: 0.04em;
       font-weight: 500;
     }
-    /* Varetype under produktnavnet — bare på mobil, der egen kolonne
-       stjeler for mye plass fra produktet. */
-    .type-label { display: none; }
+    /* Varetype + kategori som dempet linje under produktnavnet, så
+       produktkolonnen kan ta mesteparten av bredden. */
+    .type-label {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
     input[type="number"].qty {
       width: 70px;
       padding: 4px 8px;
@@ -370,6 +381,7 @@
       align-items: stretch;
       margin-top: 20px;
     }
+    .create-row .htmx-indicator { align-self: center; }
     .create-row input[type="text"] {
       flex: 1;
       padding: 10px 12px;
@@ -531,6 +543,9 @@
     @keyframes chip-spin {
       to { transform: rotate(360deg); }
     }
+    @media (prefers-reduced-motion: reduce) {
+      .chip-x.htmx-request { animation: none; }
+    }
     #table-wrap th:last-child, #table-wrap td:last-child {
       width: 1px;
       white-space: nowrap;
@@ -553,24 +568,28 @@
       display: inline-block;
       visibility: hidden;
     }
+    /* Bor i handlingscellen sammen med ⇄ og ×, samme mål som dem. */
     .add-variant, .remove-variant {
       background: transparent;
-      border: 1px solid var(--rule);
+      border: 1px solid transparent;
       color: var(--muted);
       cursor: pointer;
-      width: 20px;
-      height: 20px;
+      width: 24px;
+      height: 24px;
       border-radius: 4px;
       font-size: 14px;
       line-height: 1;
       padding: 0;
-      margin-left: 4px;
       font-family: inherit;
       vertical-align: middle;
       visibility: hidden;
     }
     tr:hover .add-variant,
-    tr:hover .remove-variant { visibility: visible; }
+    tr:hover .remove-variant,
+    /* visibility: hidden tar knappene ut av tab-rekkefølgen, så de må
+       også fram når noe i raden har tastaturfokus. */
+    tr:focus-within .add-variant,
+    tr:focus-within .remove-variant { visibility: visible; }
     .add-variant:hover {
       color: var(--accent);
       border-color: var(--accent);
@@ -583,7 +602,7 @@
     }
     .product-select {
       width: 100%;
-      max-width: 280px;
+      max-width: 420px;
       padding: 4px 6px;
       border: 1px solid transparent;
       border-radius: 4px;
@@ -688,26 +707,31 @@
       text-align: center;
     }
     .mc-year { display: block; font-weight: 600; color: var(--ink); }
-    /* Skjul-hele-varetypen-knapp, søsken til .hide-btn */
-    .hide-type-btn {
+    /* Angre-linje etter en skjuling (× eller «skjul hele varetypen») */
+    .undo-line {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 8px 12px;
+      margin-bottom: 10px;
+      background: var(--accent-soft);
+      border-radius: 6px;
+      font-size: 13px;
+    }
+    .undo-btn {
       background: transparent;
-      border: 1px solid transparent;
-      color: var(--muted);
-      width: 24px;
-      height: 24px;
-      border-radius: 4px;
+      border: none;
+      color: var(--accent);
       cursor: pointer;
-      font-size: 14px;
-      line-height: 1;
-      padding: 0;
       font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 0;
+      text-decoration: underline;
+      text-underline-offset: 2px;
     }
-    tr:hover .hide-type-btn { color: var(--ink); }
-    .hide-type-btn:hover {
-      color: var(--warn);
-      border-color: var(--rule);
-      background: var(--warn-soft);
-    }
+    .undo-btn:hover { color: var(--accent-hover); }
     /* Bytt-vare (⇄) og fjern-valg (↩), søsken til .hide-btn */
     .swap-btn, .unchoose-btn {
       background: transparent;
@@ -883,18 +907,11 @@
       /* Unntak: innstillings-panelet er absolutt posisjonert og ville
          blitt klippet av scroll-konteksten. Ingen tabell her uansett. */
       section.controls-section { overflow: visible; }
-      .product-select { max-width: 160px; }
+      /* min-width gir navnet lesbar plass; pris/knapper ruller heller
+         litt sidelengs. */
+      .product-select { max-width: 220px; min-width: 170px; }
       td.thumb { width: 38px; }
       td.thumb img { width: 32px; height: 32px; }
-      /* Varetype-kolonnen krymper til bare +/−-knappen; navnet flytter
-         inn under produktet i stedet. */
-      .type-cell { width: 1%; }
-      .type-label {
-        display: block;
-        font-size: 11px;
-        color: var(--muted);
-        margin-top: 2px;
-      }
       .search-field input,
       .settings-panel input { font-size: 16px; }
       .settings-panel { width: min(250px, calc(100vw - 48px)); }
@@ -917,7 +934,7 @@
       .add-variant, .remove-variant { visibility: visible; }
     }
     @media (pointer: coarse) {
-      .hide-btn, .hide-type-btn { width: 32px; height: 32px; }
+      .hide-btn { width: 32px; height: 32px; }
       .chip-x { width: 26px; height: 26px; }
       .reset-qty { width: 24px; }
       /* Nettbrett er bredere enn 720px men trenger fortsatt −/+. */
@@ -928,8 +945,10 @@
 <body>
   <div class="wrap">
     <nav class="tabs">
-      <a href="/handleliste" class="{% if active == 'handleliste' %}active{% endif %}">Handleliste</a>
-      <a href="/innsikt" class="{% if active == 'innsikt' %}active{% endif %}">Innsikt</a>
+      <a href="/handleliste" class="{% if active == 'handleliste' %}active{% endif %}"
+         {% if active == 'handleliste' %}aria-current="page"{% endif %}>Handleliste</a>
+      <a href="/innsikt" class="{% if active == 'innsikt' %}active{% endif %}"
+         {% if active == 'innsikt' %}aria-current="page"{% endif %}>Innsikt</a>
       <div id="refresh-status" class="refresh-status">
         {% include "_refresh_status.html" %}
       </div>
@@ -956,7 +975,7 @@
     </div>
     {% endif %}
     {% block content %}{% endblock %}
-    <footer>Oda-analyse · personlig</footer>
+    <footer>Min Oda · personlig</footer>
   </div>
   <script>
     (function () {
@@ -1052,9 +1071,52 @@
         recomputeTotals(document);
       });
 
-      document.body.addEventListener('htmx:afterSwap', () => {
+      // Enter i et felt skal aldri sende hele skjemaet til Oda — bare de
+      // eksplisitte knappene poster. (Implisitt submit fra søke-, antalls-
+      // eller tittelfeltet ville lagt alt i kurven / opprettet listen.)
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        if (e.target instanceof HTMLInputElement && e.target.closest('form[data-mode]')) {
+          e.preventDefault();
+        }
+      });
+
+      // Etter en filterendring: hold adresselinjen og modus-lenkene i takt
+      // med filtrene, så reload/tilbake og modusbytte ikke mister dem.
+      function syncFilterUrls() {
+        const form = document.querySelector('form[data-mode]');
+        if (!form) return;
+        const val = (n) => {
+          const el = form.elements[n];
+          return el ? String(el.value).trim() : '';
+        };
+        const base = new URLSearchParams();
+        ['cycle', 'top', 'max_per_cat'].forEach(n => { if (val(n)) base.set(n, val(n)); });
+        if (val('search')) base.set('search', val('search'));
+        const diff = new URLSearchParams(base);
+        const topUp = form.elements['top_up'];
+        if (topUp && topUp.checked) diff.set('top_up', 'true');
+        const ny = new URLSearchParams(base);
+        ny.set('new_list', 'true');
+        const diffUrl = '/handleliste' + (diff.toString() ? '?' + diff : '');
+        const nyUrl = '/handleliste?' + ny;
+        const links = document.querySelectorAll('.mode-toggle a');
+        if (links[0]) links[0].href = diffUrl;
+        if (links[1]) links[1].href = nyUrl;
+        history.replaceState(null, '', form.dataset.mode === 'new_list' ? nyUrl : diffUrl);
+      }
+
+      document.body.addEventListener('htmx:afterSwap', (e) => {
         applyStored(document);
         recomputeTotals(document);
+        const id = e.detail && e.detail.target && e.detail.target.id;
+        if (id === 'table-wrap' || id === 'table-and-blocked') {
+          syncFilterUrls();
+          // En gammel «La N varer i kurven»-melding stemmer ikke lenger
+          // når tabellen under den er byttet ut.
+          const result = document.getElementById('result');
+          if (result) result.innerHTML = '';
+        }
       });
       applyStored(document);
       recomputeTotals(document);

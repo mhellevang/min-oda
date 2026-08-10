@@ -14,6 +14,7 @@
               hx-include="closest form"
               hx-target="#table-and-blocked" hx-swap="innerHTML"
               hx-disabled-elt="this"
+              aria-label="Vis varetypen {{ it.key }} igjen"
               title="Vis varetypen {{ it.key }} igjen">↩</button>
     </li>
     {% endfor %}
@@ -38,6 +39,7 @@
               hx-include="closest form"
               hx-target="#table-and-blocked" hx-swap="innerHTML"
               hx-disabled-elt="this"
+              aria-label="Vis {{ it.name or it.product_id }} igjen"
               title="Vis {{ it.name or it.product_id }} igjen">↩</button>
     </li>
     {% endfor %}

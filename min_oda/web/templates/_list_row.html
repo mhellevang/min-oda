@@ -1,21 +1,4 @@
 <tr {% if r.is_extra %}class="is-extra" title="Kommer fram fordi du utvidet et filter"{% endif %}>
-  <td class="muted hide-sm">{{ r.category }}</td>
-  <td class="nowrap type-cell">
-    <span class="hide-sm">{{ r.key|capitalize }}</span>
-    {% if r.is_engangs %}
-    {% elif r.is_added_variant %}
-    <button type="button" class="remove-variant"
-            onclick="this.closest('tr').remove(); window.minOdaRecount && window.minOdaRecount()"
-            title="Fjern denne varianten fra listen">−</button>
-    {% else %}
-    <button type="button" class="add-variant"
-            hx-post="/handleliste/variant-add"
-            hx-vals='{"key": {{ r.key|tojson }}, "cycle": "{{ cycle }}", "new_list": "{{ 'true' if new_list else 'false' }}"}'
-            hx-include="closest form"
-            hx-target="closest tr" hx-swap="afterend"
-            title="Legg til en annen variant av samme varetype">+</button>
-    {% endif %}
-  </td>
   <td class="thumb">
     {% if r.image %}
     <a href="{{ r.image }}" target="_blank" rel="noopener"
@@ -42,16 +25,20 @@
     {% if r.is_chosen %}
     <span class="chosen-badge" title="Fast valgt: overstyrer mest kjøpte variant til du fjerner valget (↩)">valgt</span>
     {% endif %}
-    <span class="type-label">{{ r.key|capitalize }}</span>
+    {# Varetype + kategori som dempet linje — frigjør to kolonner. #}
+    <span class="type-label">{{ r.key|capitalize }}{% if r.category %}<span class="hide-sm"> · {{ r.category }}</span>{% endif %}</span>
   </td>
   {% if not new_list %}
-  <td class="num muted hide-sm">{{ r.forslag }}</td>
-  <td class="num muted hide-sm">{{ r.i_kurv }}</td>
+  <td class="num muted hide-sm nowrap"
+      title="{{ r.i_kurv }} i kurven nå, du pleier å trenge {{ r.forslag }}">
+    {{ r.i_kurv }} av {{ r.forslag }}
+  </td>
   {% endif %}
   <td class="num nowrap">
     <span class="qty-stepper">
       <button type="button" class="qty-btn" data-step="-1" aria-label="Én færre">−</button>
       <input type="number" class="qty" name="qty_{{ r.product_id }}"
+             aria-label="Antall {{ r.product_name }}"
              value="{{ r.qty }}" data-default="{{ r.qty }}"
              data-pid="{{ r.product_id }}"
              data-price="{{ '%.2f'|format(r.unit_price) if r.unit_price is not none else '' }}"
@@ -59,7 +46,8 @@
       <button type="button" class="qty-btn" data-step="1" aria-label="Én til">+</button>
     </span>
     <button type="button" class="reset-qty" data-pid="{{ r.product_id }}"
-            hidden title="Tilbakestill til foreslått antall">↻</button>
+            hidden aria-label="Tilbakestill til foreslått antall"
+            title="Tilbakestill til foreslått antall">↻</button>
   </td>
   <td class="num line-cost"
       {% if r.unit_price is not none %}title="ca. {{ r.unit_price|format_kr }}/stk · sist betalt"{% endif %}>
@@ -75,34 +63,51 @@
             hx-vals='{"product_id": {{ r.product_id|tojson }}}'
             hx-include="closest form"
             hx-target="#table-and-blocked" hx-swap="innerHTML"
+            hx-disabled-elt="this"
+            aria-label="Fjern {{ r.product_name }} fra lista"
             title="Fjern engangsvaren fra lista">×</button>
-    {% elif r.is_chosen %}
+    {% else %}
+    {% if r.is_added_variant %}
+    <button type="button" class="remove-variant"
+            onclick="this.closest('tr').remove(); window.minOdaRecount && window.minOdaRecount()"
+            aria-label="Fjern denne varianten fra listen"
+            title="Fjern denne varianten fra listen">−</button>
+    {% else %}
+    <button type="button" class="add-variant"
+            aria-label="Legg til en annen variant av {{ r.key }}"
+            hx-post="/handleliste/variant-add"
+            hx-disabled-elt="this"
+            hx-vals='{"key": {{ r.key|tojson }}, "cycle": "{{ cycle }}", "new_list": "{{ 'true' if new_list else 'false' }}"}'
+            hx-include="closest form"
+            hx-target="closest tr" hx-swap="afterend"
+            title="Legg til en annen variant av samme varetype">+</button>
+    {% endif %}
+    {% if r.is_chosen %}
     <button type="button" class="unchoose-btn"
             hx-post="/handleliste/fjern-representant"
             hx-vals='{"key": {{ r.key|tojson }}}'
             hx-include="closest form"
             hx-target="#table-and-blocked" hx-swap="innerHTML"
+            hx-disabled-elt="this"
+            aria-label="Fjern det faste valget for {{ r.key }}"
             title="Fjern det faste valget for {{ r.key }} (gå tilbake til mest kjøpte variant)">↩</button>
     {% else %}
     <button type="button" class="swap-btn"
             hx-get="/handleliste/bytt"
             hx-vals='{"key": {{ r.key|tojson }}}'
             hx-target="closest tr" hx-swap="afterend"
+            hx-disabled-elt="this"
+            aria-label="Bytt vare for {{ r.key }}"
             title="Bytt til en vare fra Oda-katalogen (også varer du aldri har kjøpt)">⇄</button>
     {% endif %}
-    {% if not r.is_engangs %}
     <button type="button" class="hide-btn"
             hx-post="/handleliste/block"
-            hx-vals='{"product_id": {{ r.product_id|tojson }}, "name": {{ r.product_name|tojson }}}'
+            hx-vals='{"product_id": {{ r.product_id|tojson }}, "name": {{ r.product_name|tojson }}, "key": {{ r.key|tojson }}}'
             hx-include="closest form"
             hx-target="#table-and-blocked" hx-swap="innerHTML"
-            title="Skjul bare denne varianten ({{ r.product_name }}). En annen variant av {{ r.key }} kan overta.">×</button>
-    <button type="button" class="hide-type-btn"
-            hx-post="/handleliste/block-type"
-            hx-vals='{"key": {{ r.key|tojson }}, "name": {{ r.key|capitalize|tojson }}}'
-            hx-include="closest form"
-            hx-target="#table-and-blocked" hx-swap="innerHTML"
-            title="Skjul hele varetypen «{{ r.key }}» fra forslag (ingen variant overtar).">⊘</button>
+            hx-disabled-elt="this"
+            aria-label="Skjul {{ r.product_name }}"
+            title="Skjul {{ r.product_name }} fra forslag. En annen variant av {{ r.key }} kan overta.">×</button>
     {% endif %}
   </td>
 </tr>

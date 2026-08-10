@@ -1,3 +1,32 @@
+{# Angre-linje etter en skjuling: gjør feiltrykk på × billige, og er
+   veien til å skjule hele varetypen (erstattet ⊘-knappen per rad). #}
+{% if notice %}
+<div class="undo-line" role="status">
+  {% if notice.kind == 'product' %}
+  <span>«{{ notice.name }}» er skjult.</span>
+  <button type="button" class="undo-btn"
+          hx-post="/handleliste/unblock"
+          hx-vals='{"product_id": {{ notice.product_id|tojson }}}'
+          hx-include="closest form"
+          hx-target="#table-and-blocked" hx-swap="innerHTML"
+          hx-disabled-elt="this">Angre</button>
+  <button type="button" class="undo-btn"
+          hx-post="/handleliste/block-type"
+          hx-vals='{"key": {{ notice.key|tojson }}, "name": {{ notice.key|capitalize|tojson }}}'
+          hx-include="closest form"
+          hx-target="#table-and-blocked" hx-swap="innerHTML"
+          hx-disabled-elt="this">Skjul hele varetypen «{{ notice.key }}»</button>
+  {% else %}
+  <span>Varetypen «{{ notice.name or notice.key }}» er skjult.</span>
+  <button type="button" class="undo-btn"
+          hx-post="/handleliste/unblock-type"
+          hx-vals='{"key": {{ notice.key|tojson }}}'
+          hx-include="closest form"
+          hx-target="#table-and-blocked" hx-swap="innerHTML"
+          hx-disabled-elt="this">Angre</button>
+  {% endif %}
+</div>
+{% endif %}
 <div id="table-wrap">
   {% include "_list_table.html" %}
 </div>

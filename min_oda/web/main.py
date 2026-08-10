@@ -148,6 +148,8 @@ def _register_template_globals() -> None:
     templates.env.filters["format_age"] = format_age
     templates.env.filters["format_days_ago"] = format_days_ago
     templates.env.filters["format_kr"] = format_kr
+    templates.env.filters["format_int"] = format_int
+    templates.env.filters["format_dato"] = _no_short_date
 
 
 # Registrert i bunnen av modulen, etter at refresh_status_ctx er definert.
@@ -212,6 +214,14 @@ def format_kr(value) -> str:
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return "–"
     return f"{round(float(value)):,d} kr".replace(",", " ")
+
+
+def format_int(value) -> str:
+    """Jinja-filter: tall → '1 234' (mellomrom som tusenskille), '–' for
+    manglende verdi. Som format_kr, uten kr-suffiks."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return "–"
+    return f"{round(float(value)):,d}".replace(",", " ")
 
 
 def format_days_ago(days: int | float | None) -> str:
@@ -763,10 +773,13 @@ def handleliste_table(
     )
 
 
-async def _render_body_after_block_change(request: Request) -> HTMLResponse:
+async def _render_body_after_block_change(
+    request: Request, notice: dict | None = None
+) -> HTMLResponse:
     """Re-rendrer både tabellen og blokk-listen etter en blokk/avblokk.
     Henter filtrene fra form-data (inkludert via hx-include) slik at
-    visningen beholder cycle/top/search/etc."""
+    visningen beholder cycle/top/search/etc. `notice` rendres som en
+    angre-linje over tabellen (etter × og «skjul hele varetypen»)."""
     form = await request.form()
 
     def _int(name: str, default: int) -> int:
@@ -800,6 +813,7 @@ async def _render_body_after_block_change(request: Request) -> HTMLResponse:
             "list_total": _list_total(rows),
             "blocked_items": blocklist.list_blocked(),
             "blocked_types": blocklist.list_blocked_types(),
+            "notice": notice,
         },
     )
 
@@ -811,9 +825,17 @@ async def handleliste_block(request: Request) -> HTMLResponse:
         pid = int(str(form.get("product_id") or ""))
     except ValueError:
         return HTMLResponse("Ugyldig product_id", status_code=400)
-    blocklist.block(pid, name=str(form.get("name") or ""))
+    name = str(form.get("name") or "")
+    key = str(form.get("key") or "").strip()
+    blocklist.block(pid, name=name)
     invalidate_blocklist_caches()
-    return await _render_body_after_block_change(request)
+    notice = {
+        "kind": "product",
+        "product_id": pid,
+        "name": name or str(pid),
+        "key": key,
+    } if key else None
+    return await _render_body_after_block_change(request, notice)
 
 
 @app.post("/handleliste/unblock", response_class=HTMLResponse)
@@ -836,9 +858,12 @@ async def handleliste_block_type(request: Request) -> HTMLResponse:
     key = str(form.get("key") or "").strip()
     if not key:
         return HTMLResponse("Mangler varetype", status_code=400)
-    blocklist.block_type(key, name=str(form.get("name") or ""))
+    name = str(form.get("name") or "")
+    blocklist.block_type(key, name=name)
     invalidate_blocklist_caches()
-    return await _render_body_after_block_change(request)
+    return await _render_body_after_block_change(
+        request, {"kind": "type", "key": key, "name": name}
+    )
 
 
 @app.post("/handleliste/unblock-type", response_class=HTMLResponse)
@@ -1033,7 +1058,7 @@ def _parse_qty_items(form) -> list[tuple[int, int]]:
 async def handleliste_create(request: Request) -> HTMLResponse:
     form = await request.form()
     cycle = int(form.get("cycle") or DEFAULT_CYCLE)
-    title = form.get("title") or "Ukehandel — familien"
+    title = form.get("title") or "Ukehandel"
 
     items = _parse_qty_items(form)
     if not items:

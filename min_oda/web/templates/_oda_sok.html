@@ -1,7 +1,10 @@
 {# Katalogtreff fra Oda. Med `key` satt (byttemodus) får treffene en
    velg-knapp som setter fast representant; ellers en knapp som legger
    varen på den lokale lista som engangsvare (postes først ved bulk). #}
-{% if q %}
+{% if not q %}
+{# Tomt søk skal ikke være et stille ingenting — si hva knappen trenger. #}
+<p class="muted oda-sok-heading">Skriv i søkefeltet først, så søker knappen i hele Oda-katalogen.</p>
+{% else %}
 {% if error %}
 <p class="muted">Søket mot Oda feilet: {{ error }}</p>
 {% elif results %}
@@ -14,6 +17,7 @@
     <span class="muted nowrap">{% if p.price is not none %}{{ p.price|format_kr }}{% else %}–{% endif %}</span>
     {% if key %}
     <button type="button" class="oda-sok-action"
+            hx-disabled-elt="this"
             hx-post="/handleliste/velg-representant"
             hx-vals='{"key": {{ key|tojson }}, "product_id": "{{ p.product_id }}", "name": {{ p.name|tojson }}, "price": "{{ p.price_str }}", "image": {{ (p.image or "")|tojson }}}'
             hx-include="closest form"
@@ -21,6 +25,7 @@
             title="Bruk denne som fast forslag for {{ key }}">Velg denne</button>
     {% else %}
     <button type="button" class="oda-sok-action"
+            hx-disabled-elt="this"
             hx-post="/handleliste/engangs-legg-til"
             hx-vals='{"product_id": "{{ p.product_id }}", "name": {{ p.name|tojson }}, "price": "{{ p.price_str }}", "image": {{ (p.image or "")|tojson }}}'
             hx-include="closest form"

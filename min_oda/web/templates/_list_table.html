@@ -2,22 +2,20 @@
 <table>
   <thead>
     <tr>
-      <th class="hide-sm">Kategori</th>
-      <th><span class="hide-sm">Varetype</span></th>
       <th aria-label="Bilde"></th>
       <th>Produkt</th>
       {% if new_list %}
       <th class="num">Antall</th>
       {% else %}
-      <th class="num hide-sm">Forslag</th>
-      <th class="num hide-sm">I kurv</th>
+      <th class="num hide-sm nowrap"
+          title="Antall i kurven nå, av det du pleier å trenge">I kurv</th>
       <th class="num">Mangler</th>
       {% endif %}
       <th class="num">Pris</th>
       {% if new_list %}
       <th class="hide-sm">Sist kjøpt</th>
       {% endif %}
-      <th aria-label="Skjul"></th>
+      <th aria-label="Handlinger"></th>
     </tr>
   </thead>
   <tbody>
@@ -27,7 +25,7 @@
   </tbody>
   <tfoot>
     <tr class="total-row">
-      <td colspan="{{ 8 if new_list else 9 }}" class="num">
+      <td colspan="6" class="num">
         Totalt (ca.) <strong id="list-total">{{ list_total|format_kr }}</strong>
       </td>
     </tr>

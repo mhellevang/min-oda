@@ -3,11 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Logg inn – Min Oda</title>
+  <meta name="theme-color" content="#fafaf8">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#16181c">
+  <title>Logg inn · Min Oda</title>
   <style>
     :root {
+      color-scheme: light dark;
       --bg: #fafaf8; --card: #fff; --ink: #1a1a1a; --muted: #666;
       --rule: #e5e3df; --accent: #2a6f97; --warn: #d62828; --warn-soft: #fde2e2;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #16181c; --card: #1e2127; --ink: #e6e6e6; --muted: #9aa0a8;
+        --rule: #31353d; --accent: #5fa8d3; --warn: #f7a19a; --warn-soft: #3a1f1f;
+      }
     }
     * { box-sizing: border-box; }
     body {
@@ -24,7 +33,7 @@
     label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
     input[type=password] {
       width: 100%; padding: 10px 12px; font-size: 16px; border: 1px solid var(--rule);
-      border-radius: 6px; background: #fff; color: var(--ink);
+      border-radius: 6px; background: var(--card); color: var(--ink);
     }
     input[type=password]:focus { outline: none; border-color: var(--accent); }
     button {
