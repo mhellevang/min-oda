@@ -1,139 +1,135 @@
 # Min Oda
 
-Henter handlehistorikken din fra oda.com og bruker den til to ting:
-bygge handlelister (eller supplere kurven med varer som mangler), og
-vise mønstre i hva du faktisk handler. Alt kjører lokalt. Ingenting
-forlater maskinen.
+En webapp som henter handlehistorikken din fra oda.com og bruker den til
+to ting: foreslå hva du bør handle nå (basert på hvor ofte du faktisk
+kjøper hver varetype), og vise mønstre i hva husstanden handler. Kjører
+lokalt eller på egen server. Ingenting deles med andre enn oda.com.
 
-## Oppsett
-
-1. Logg inn på oda.com i nettleseren din (Firefox, Chrome, Safari, Edge,
-   Brave, Arc, Opera, Vivaldi, Chromium eller LibreWolf). Hold den
-   innlogget. Appen leser session-cookien direkte fra nettleseren.
-2. Installer avhengigheter:
-   ```sh
-   uv sync
-   ```
-
-Hvis du har flere nettlesere innlogget på Oda samtidig, brukes den
-første som har en gyldig session-cookie (Firefox før Chrome før Safari
-osv.). Overstyr med `ODA_BROWSER=firefox` i miljøet hvis du vil tvinge
-en spesifikk.
-
-På macOS vil Chrome/Brave/Edge spørre om Keychain-tilgang første gang,
-fordi cookies er kryptert med systemnøkkelen. Firefox krever ingen
-prompt.
-
-### Manuell cookie (fallback)
-
-Hvis automatikken ikke fungerer (uvanlig nettleserprofil, sandkasse,
-etc.), kopier `.env.example` til `.env` og lim inn `sessionid` og
-`csrftoken` fra DevTools (`F12` → **Storage** → **Cookies** →
-`https://oda.com`). Når `.env` har verdier, brukes de fremfor
-nettleser-cookies.
-
-### Innlogging med brukernavn og passord
-
-På en server uten innlogget nettleser (f.eks. NAS) kan appen logge inn
-mot Oda selv. Sett `ODA_USERNAME` og `ODA_PASSWORD` i `.env`, så henter
-den en sesjon og buffrer den i `data/session.json` (fornyes automatisk
-når den utløper). Kilde-rekkefølge: manuell cookie → passord → nettleser.
-
-Dette er bevisst litt skjørt: login-endepunktet er udokumentert, og hvis
-Oda innfører captcha eller 2FA feiler det (synlig i loggen). Da faller du
-tilbake på manuell cookie i `.env`.
-
-For å kjøre hele greia på TrueNAS via Dockge, med Cloudflare Tunnel og
-tilgangsstyring foran, se [DEPLOY.md](DEPLOY.md).
-
-## Start
+## Kom i gang
 
 ```sh
+uv sync
 uv run min-oda
 ```
 
-Starter appen på `http://localhost:8000`. Ved oppstart sjekkes alderen
-på `data/orders.json`. Hvis den er eldre enn 24 timer, hentes nye ordrer
-fra Oda og CSV-ene bygges på nytt. Du kan også oppdatere når som helst
-via knappen `⟳` øverst til høyre.
+Appen starter på `http://localhost:8000`. Eneste forutsetning er at du
+er logget inn på oda.com i en nettleser på samme maskin, appen leser
+session-cookien derfra (se [Innlogging mot Oda](#innlogging-mot-oda)).
 
-Første gang du starter, eller hvis cookien er utløpt, vises en
-advarsel i navigasjonen og appen kjører videre med eksisterende data.
-Logg inn på oda.com på nytt i nettleseren og trykk `⟳` for å fortsette.
+Ved oppstart hentes ordrehistorikken din hvis den lokale kopien er
+eldre enn 24 timer. Du kan også oppdatere når som helst med `⟳`-knappen
+øverst til høyre. Er cookien utløpt vises en advarsel i navigasjonen,
+og appen kjører videre med eksisterende data til du har logget inn på
+oda.com igjen.
 
-### Hente data manuelt
+Alternativt via Docker: `docker compose up --build`.
 
-Hvis du vil tvinge en oppdatering fra terminalen:
+## Handleliste
+
+`/handleliste` regner ut kjøpskadens per *varetype* (brød, melk, bleier
+...), ikke per produkt, så bytte mellom merker teller som samme behov.
+Hver rad viser status (forfalt / snart / i rute), dager til eller siden
+varen typisk trengs, og foreslått antall. To moduser:
+
+- **Legg til handlekurv** (default): sammenligner faste varer med kurven
+  din på oda.com akkurat nå og viser kun det som mangler. Ett klikk
+  legger alt i kurven.
+- **Lagre som handleliste**: bygger en komplett ukehandel-liste uavhengig
+  av kurven og lagrer den som gjenbrukbar liste på Oda.
+
+Slidere bak tannhjulet styrer syklus, maks antall varer og maks per
+kategori. Rader som bare dukker opp fordi et filter er utvidet, markeres
+med en aksent-stripe.
+
+Lista kan justeres direkte:
+
+- **×** på en rad skjuler produktet fra forslag (typisk bleier i en
+  størrelse barnet vokste forbi). En annen variant av samme varetype tar
+  automatisk over. Skjulte varer listes nederst og kan hentes tilbake.
+- **⇄** på en rad søker i Oda-katalogen og lar deg velge et annet produkt
+  som fast representant for varetypen, også varer du aldri har kjøpt.
+- **Søk hos Oda** ved søkefeltet finner katalogvarer utenfor de faste
+  forslagene og legger dem på lista som engangsvarer.
+
+Ingenting sendes til Oda før du trykker en av bulk-knappene.
+
+## Innsikt
+
+`/innsikt` svarer på hva handleturene sier om husstanden:
+
+- Nøkkeltall: totalt brukt, snitt per ordre, handlefrekvens
+- Månedlig forbruk med årlig sesongmønster
+- Husstandens DNA: varene som er med i over 40 % av ordrene
+- Matkultur (norsk / italiensk / asiatisk / tex-mex / indisk),
+  kokestil (råvarer vs. ferdigmat), prisbevissthet og helsesignaler
+- Drikkeprofil, topp produkter og kategorier siste 12 måneder
+- Sesongprodukter og året i Oda-måneder (sommerferie-gapet)
+- Basket-analyse: hvilke varer havner ofte sammen, med et
+  "når jeg kjøper X, hva følger med?"-søk
+
+## Innlogging mot Oda
+
+Tre kilder, i prioritert rekkefølge:
+
+1. **Manuell cookie i `.env`**: kopier `.env.example` til `.env` og lim
+   inn `sessionid` og `csrftoken` fra DevTools (`F12` → Storage →
+   Cookies → `https://oda.com`).
+2. **Brukernavn og passord**: sett `ODA_USERNAME` og `ODA_PASSWORD` i
+   `.env`, så logger appen inn selv og buffrer sesjonen i
+   `data/session.json`. Nødvendig på servere uten nettleser. Bevisst
+   litt skjørt: login-endepunktet er udokumentert, og captcha eller 2FA
+   fra Oda vil knekke det (synlig i loggen).
+3. **Nettleser-cookie** (default lokalt): leses automatisk fra Firefox,
+   Chrome, Safari, Edge, Brave, Arc, Opera, Vivaldi, Chromium eller
+   LibreWolf via `rookiepy`. Første med gyldig session vinner, overstyr
+   med `ODA_BROWSER=firefox`. På macOS ber Chrome-familien om
+   Keychain-tilgang første gang, Firefox spør ikke.
+
+## Kjøre på egen server
+
+`docker-compose.truenas.yml` er en frittstående stack for hjemmeserver
+bak NAT: ferdigbygget image fra GHCR, Cloudflare Tunnel for tilgang
+utenfra uten portåpning, Watchtower for auto-deploy ved push til `main`,
+og app-passord (`APP_PASSWORD` i `.env`) foran hele appen. Full guide i
+[DEPLOY.md](DEPLOY.md).
+
+Ingenting i appen krever det oppsettet. Den er en vanlig FastAPI-app på
+port 8000 og kan like gjerne stå bak en annen reverse proxy. Ved fork
+bygger CI automatisk til ditt eget GHCR-navnerom
+(`ghcr.io/<bruker>/<repo>`), sett `ODA_IMAGE` i `.env` så compose-filene
+bruker det.
+
+## Under panseret
+
+To lag: en datapipeline som lagrer ordrehistorikk som CSV under `data/`
+(gitignored), og FastAPI + HTMX oppå. All analyse er ren pandas uten
+I/O, se `CLAUDE.md` for arkitekturen.
+
+Tvinge en henting fra terminalen:
 
 ```sh
 uv run python -m min_oda.fetch_orders
 ```
 
-Hvis ingen av de antatte endepunktene treffer, finn riktig URL i DevTools:
+Treffer ikke de antatte endepunktene lenger, finn riktig URL i
+DevTools (Network-fanen på Mine ordrer-siden) og kjør
+`uv run python -m min_oda.fetch_orders --url '<URL>'`.
 
-1. Åpne `oda.com` → **Min konto** → **Mine ordrer** med F12 oppe.
-2. Network-fanen, filtrer XHR/Fetch.
-3. Finn en request som returnerer JSON med ordrelisten.
-4. Høyreklikk → Copy → Copy URL.
-5. Kjør `uv run python -m min_oda.fetch_orders --url '<URL>'`.
-
-## Funksjonalitet
-
-To faner:
-
-**Handleliste** (`/handleliste`) har to moduser:
-
-- *Legg til handlekurv* (default): sammenligner faste varer med kurven
-  din på oda.com akkurat nå og viser kun det som mangler. Juster antall,
-  opprett en restliste på Oda, legg den til kurven derfra.
-- *Lagre som handleliste*: bygg en komplett ukehandel-liste basert på
-  kjøpskadens per varetype, og lagre den som en gjenbrukbar mal på Oda.
-
-Begge moduser viser status-pills (forfalt / snart / i rute) og hvor
-mange dager til (eller siden) varen typisk trenger å handles. Slidere
-for syklus, maks antall varer og maks per kategori. Rader som dukker
-opp fordi du har utvidet et filter, markeres med en aksent-stripe så
-du ser hva som er "ekstra" sammenlignet med default.
-
-Klikk **×** på en rad for å skjule et produkt midlertidig fra
-forslag (typisk bleier i en størrelse barnet vokste forbi — barnet
-vokser kanskje inn i den igjen, så du vil ikke fjerne historikken).
-Et annet produkt i samme varetype tar automatisk over som forslag.
-Skjulte varer listes nederst på siden, klikk **×** på chip-en for å
-vise igjen. Listen lagres i `data/blocklist.json` og kan også
-redigeres for hånd.
-
-**Innsikt** (`/innsikt`): hva sier handleturene om husstanden?
-
-- Nøkkeltall (totalt brukt, snitt per ordre, frekvens)
-- Månedlig forbruk-graf (med årlig sesongmønster)
-- Husstandens DNA: varer i mer enn 40 % av ordrene
-- Matkultur (norsk / italiensk / asiatisk / tex-mex / indisk)
-- Kokestil (råvarer vs. ferdigmat) + prisbevissthet + helsesignaler
-- Drikkeprofil (brus / øl / juice / kaffe / vann)
-- Topp produkter og kategorier siste 12 mnd
-- Sesongprodukter (kun kjøpt visse måneder)
-- Året i Oda-måneder (sommerferie-gapet)
-- Basket-analyse: hvilke varer havner ofte sammen, og en
-  *"når jeg kjøper X, hva følger med?"*-søk
-
-## Tester
+Tester:
 
 ```sh
 uv run pytest
 ```
 
 Dekker data-algoritmene (kadens, kurv-diff, kuratering, varetype-
-klassifisering) og en smoke-test av web-rutene. Web-testene hopper
-over hvis `data/orders.csv` mangler.
+klassifisering) og en smoke-test av web-rutene. Web-testene hopper over
+hvis `data/orders.csv` mangler, det er forventet i en fersk klone.
 
-## Sikkerhet
+## Personvern
 
-- `.env` og `data/` er gitignored, så cookies og handlehistorikk
-  forlater aldri maskinen.
-- Det er kun session-cookien som brukes til autentisering, ikke
-  brukernavn og passord. Cookien leses lokalt fra nettleserens egen
-  cookie-database (via biblioteket `rookiepy`) og sendes kun til
-  oda.com.
-- Cookien utløper etter en stund. Hvis du får 401/403, logg inn på
-  oda.com igjen i nettleseren og trykk `⟳`.
+- `.env` og `data/` er gitignored: cookies, sesjoner og handlehistorikk
+  havner aldri i git.
+- Credentials sendes kun til oda.com. Nettleser-cookien leses lokalt
+  fra nettleserens egen cookie-database.
+- Får du 401/403 er cookien utløpt: logg inn på oda.com igjen og
+  trykk `⟳`.
