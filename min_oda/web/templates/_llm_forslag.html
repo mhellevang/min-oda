@@ -59,6 +59,9 @@
   {% endif %}
 
   <h4 class="oda-sok-heading">Verdt å prøve</h4>
+  {% if forslag.profil %}
+  <p class="muted">Lest ut av handlene dine: {{ forslag.profil|join(' · ') }}</p>
+  {% endif %}
   {% if forslag.nye %}
   <ul class="oda-sok-results">
     {% for p in forslag.nye %}

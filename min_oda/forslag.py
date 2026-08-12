@@ -187,45 +187,113 @@ def _sparetips(rows: list[dict], chat, search) -> list[dict] | None:
     return out
 
 
-def _nye(lines: pd.DataFrame, chat, search) -> list[dict] | None:
-    """Nye varer å prøve: LLM foreslår søkeord ut fra kjøpsprofilen, treffene
-    valideres mot katalogen, første tilgjengelige treff per søk vises.
-    None = LLM-svikt, [] = ingen forslag overlevde katalogvalideringen."""
-    top = (
-        lines.dropna(subset=["product_name"])
-        .groupby("product_name")["order_id"]
-        .nunique()
-        .sort_values(ascending=False)
-        .head(40)
+def _kjopsprofil(lines: pd.DataFrame) -> str:
+    """Kjøpsprofil-tekst for LLM-prompten. Poenget er å vise *valg*, ikke bare
+    volum: variant-fordelingen innen hver varetype avslører bevisste
+    preferanser (karbonadedeig framfor kjøttdeig, grovt framfor fint), og
+    innsikt-signalene oppsummerer kjøkken, kokestil, pris og helse."""
+    from .product_types import product_type
+    from .web import innsikt
+
+    df = lines.dropna(subset=["product_id", "product_name"]).copy()
+    typer = {
+        int(pid): product_type(navn, kat, int(pid))
+        for pid, navn, kat in df.drop_duplicates("product_id")[
+            ["product_id", "product_name", "category"]
+        ].itertuples(index=False)
+    }
+    df["_type"] = df["product_id"].astype(int).map(typer)
+    df = df.dropna(subset=["_type"])
+
+    # Varetyper etter antall ordrer, med variant-fordeling der det er valg.
+    per_variant = (
+        df.groupby(["_type", "product_name"])["order_id"].nunique()
+        .reset_index(name="n")
+        .sort_values(["_type", "n"], ascending=[True, False])
     )
-    profil = "\n".join(f"- {navn} ({n} ordrer)" for navn, n in top.items())
+    type_orden = (
+        df.groupby("_type")["order_id"].nunique()
+        .sort_values(ascending=False).head(25)
+    )
+    valg_linjer = []
+    for typ in type_orden.index:
+        varianter = per_variant[per_variant["_type"] == typ].head(3)
+        deler = ", ".join(f"{r.product_name} ({r.n} ordrer)"
+                          for r in varianter.itertuples())
+        valg_linjer.append(f"- {typ}: {deler}")
+
+    kjokken = ", ".join(
+        f"{c['name']} {c['pct']:.0f}%" for c in innsikt.cuisine_mix(lines)[:4]
+        if c["pct"] >= 1
+    )
+    stil = innsikt.cooking_style(lines)
+    pris = innsikt.price_consciousness(lines)
+    helse = innsikt.health(lines)
+    signaler = (
+        f"Kjøkken (andel av forbruk): {kjokken or 'ukjent'}\n"
+        f"Kokestil: {stil['raw_pct']:.0f}% råvarer, {stil['conv_pct']:.0f}% ferdigmat\n"
+        f"Pris: {pris['cheap_pct']:.0f}% lavpris, {pris['eco_pct']:.0f}% av linjene økologisk\n"
+        f"Helse: frukt/grønt {helse['veg']['pct']:.0f}%, kjøtt {helse['meat']['pct']:.0f}%, "
+        f"fisk {helse['fish']['pct']:.0f}%, søtt/snacks {helse['sweets']['pct']:.0f}%"
+    )
+    return (
+        "Varetyper etter kjøpsfrekvens, med hvilke varianter husholdningen "
+        "faktisk velger:\n" + "\n".join(valg_linjer) + "\n\n" + signaler
+    )
+
+
+def _treff_matcher(sok: str, navn: str) -> bool:
+    """Grov relevans-sjekk: minst ett søkeord (≥3 tegn) må stå i produktnavnet.
+    Søk uten slike ord slipper gjennom (ingenting å sjekke mot)."""
+    n = navn.lower()
+    ord_ = [o for o in sok.lower().split() if len(o) >= 3]
+    return not ord_ or any(o in n for o in ord_)
+
+
+def _nye(lines: pd.DataFrame, chat, search) -> tuple[list[str], list[dict]] | None:
+    """Nye varer å prøve. LLM-en leser først preferanser ut av kjøpsprofilen
+    (variantvalg + innsikt-signaler) og foreslår så søkeord som matcher dem;
+    treffene valideres mot katalogen. Returnerer (profil-observasjoner,
+    forslag). None = LLM-svikt, tom forslagsliste = ingenting overlevde
+    katalogvalideringen."""
     system = (
-        "Du foreslår nye dagligvarer for en husholdning, basert på hva den "
-        "faktisk kjøper. Foreslå konkrete varer som passer matprofilen men "
-        "som ikke er på listen — hull i sortimentet, naturlige tilbehør, "
-        "eller varer som løfter retter de tydelig lager."
+        "Du analyserer en husholdnings dagligvarehandel og foreslår nye varer "
+        "å prøve. Les preferansene ut av valgene, ikke bare volumet: hvilken "
+        "variant som vinner innen en varetype er et bevisst valg (karbonadedeig "
+        "framfor kjøttdeig tyder på magrere kjøtt, grovt framfor fint, økologisk "
+        "framfor ikke). Forslagene skal være interessante oppdagelser som "
+        "matcher preferansene — ikke opplagt tilbehør til det de alt kjøper, og "
+        "ikke varer de åpenbart har valgt bort."
     )
     user = (
-        f"Husholdningens mest kjøpte varer:\n{profil}\n\n"
-        "Foreslå 5 søkeord for varer de ikke kjøper i dag (norske "
+        f"{_kjopsprofil(lines)}\n\n"
+        "1. Formuler 3-5 korte observasjoner om husholdningens preferanser, "
+        "på norsk, forankret i konkrete valg over.\n"
+        "2. Foreslå 8 søkeord for nye varer de ikke kjøper i dag (norske "
         "dagligvarenavn, 1-3 ord, egnet som katalogsøk), hver med en kort "
-        "begrunnelse på norsk knyttet til profilen.\n"
-        'Svar KUN med JSON: [{"sok": "<søkeord>", "begrunnelse": "<kort>"}]'
+        "begrunnelse som peker på en av observasjonene.\n"
+        'Svar KUN med JSON: {"profil": ["<observasjon>", ...], '
+        '"forslag": [{"sok": "<søkeord>", "begrunnelse": "<kort>"}]}'
     )
-    data = llm.extract_json(chat(system, user, max_tokens=800))
-    if not isinstance(data, list):
+    data = llm.extract_json(chat(system, user, max_tokens=1200))
+    if not isinstance(data, dict) or not isinstance(data.get("forslag"), list):
         return None
+    profil = [str(p) for p in data.get("profil", []) if p][:5]
     out: list[dict] = []
-    for d in data[:5]:
+    for d in data["forslag"][:8]:
         if not isinstance(d, dict) or not d.get("sok"):
             continue
+        sok = str(d["sok"])
         try:
-            treff = search(str(d["sok"]), limit=1)
+            treff = search(sok, limit=4)
         except httpx.HTTPError:
             continue
-        if not treff:
+        # Katalogsøket kan gi urelaterte førstetreff (søk «linser» → sushi-
+        # ingefær); da stemmer ikke begrunnelsen med varen. Krev at treffet
+        # deler et ord med søket.
+        t = next((t for t in treff if _treff_matcher(sok, t["name"])), None)
+        if t is None:
             continue
-        t = treff[0]
         out.append({
             "product_id": t["product_id"],
             "navn": t["name"],
@@ -233,7 +301,7 @@ def _nye(lines: pd.DataFrame, chat, search) -> list[dict] | None:
             "image": t.get("image"),
             "begrunnelse": str(d.get("begrunnelse") or ""),
         })
-    return out
+    return profil, out
 
 
 def generer(rows: list[dict], lines: pd.DataFrame,
@@ -246,15 +314,17 @@ def generer(rows: list[dict], lines: pd.DataFrame,
         return {"feil": "Ingen LLM-provider tilgjengelig (jf. LLM_PROVIDER i .env)."}
 
     sparetips = _sparetips(rows, chat, search)
-    nye = _nye(lines, chat, search)
-    if sparetips is None and nye is None:
+    nye_resultat = _nye(lines, chat, search)
+    if sparetips is None and nye_resultat is None:
         return {"feil": "Fikk ikke brukbart svar fra språkmodellen. Prøv igjen."}
+    profil, nye = nye_resultat if nye_resultat else ([], [])
 
     forslag = {
         "generert": datetime.now().isoformat(timespec="minutes"),
         "provider": llm.provider_label(),
         "sparetips": sparetips or [],
-        "nye": nye or [],
+        "profil": profil,
+        "nye": nye,
     }
     FORSLAG_FILE.parent.mkdir(parents=True, exist_ok=True)
     FORSLAG_FILE.write_text(json.dumps(forslag, ensure_ascii=False, indent=1))

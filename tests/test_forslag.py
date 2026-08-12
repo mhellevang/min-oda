@@ -26,8 +26,13 @@ def rows():
 @pytest.fixture
 def lines():
     return pd.DataFrame({
-        "product_name": ["Tine Lettmelk 1,75 l"] * 3 + ["Solsikkebrød 620 g"] * 2,
-        "order_id": [1, 2, 3, 1, 2],
+        "product_id": [100, 100, 100, 110, 200],
+        "product_name": ["Tine Lettmelk 1,75 l"] * 3
+        + ["Q Skummet melk 1 l", "Solsikkebrød 620 g"],
+        "category": ["Meieri, ost og egg"] * 4 + ["Bakeri og konditori"],
+        "order_id": [1, 2, 3, 3, 1],
+        "quantity": [1] * 5,
+        "line_total": [30.0, 30.0, 30.0, 25.0, 45.0],
     })
 
 
@@ -76,14 +81,28 @@ def test_sparetips_uten_kandidater_gir_tom_liste(rows):
                               _search({})) == []
 
 
+def test_kjopsprofil_viser_variantvalg(lines):
+    profil = forslag._kjopsprofil(lines)
+    # Begge melkevariantene med ordretall — det er valget LLM-en skal lese.
+    assert "melk: Tine Lettmelk 1,75 l (3 ordrer), Q Skummet melk 1 l (1 ordrer)" in profil
+    assert "Kokestil:" in profil and "Helse:" in profil
+
+
 def test_nye_valideres_mot_katalogen(lines):
-    svar = json.dumps([
-        {"sok": "fiskesaus", "begrunnelse": "Passer wok-vanene."},
-        {"sok": "finnes-ikke", "begrunnelse": "Ingen treff."},
-    ])
-    hits = {"fiskesaus": [{"product_id": 500, "name": "Fiskesaus 200 ml",
-                           "price": 35.0, "image": None}]}
-    nye = forslag._nye(lines, lambda s, u, max_tokens: svar, _search(hits))
+    svar = json.dumps({
+        "profil": ["Velger helmelk-varianter fra Tine."],
+        "forslag": [
+            {"sok": "fiskesaus", "begrunnelse": "Passer wok-vanene."},
+            {"sok": "finnes-ikke", "begrunnelse": "Ingen treff."},
+        ],
+    })
+    # Første treff er urelatert (deler ikke ord med søket) — hoppes over.
+    hits = {"fiskesaus": [
+        {"product_id": 499, "name": "Sushi Ginger 190 g", "price": 55.0, "image": None},
+        {"product_id": 500, "name": "Fiskesaus 200 ml", "price": 35.0, "image": None},
+    ]}
+    profil, nye = forslag._nye(lines, lambda s, u, max_tokens: svar, _search(hits))
+    assert profil == ["Velger helmelk-varianter fra Tine."]
     assert len(nye) == 1
     assert nye[0]["product_id"] == 500
     assert nye[0]["begrunnelse"] == "Passer wok-vanene."
@@ -92,7 +111,8 @@ def test_nye_valideres_mot_katalogen(lines):
 def test_generer_skriver_cache(tmp_path, monkeypatch, rows, lines):
     monkeypatch.setattr(forslag, "FORSLAG_FILE", tmp_path / "llm_forslag.json")
     svar_sparetips = json.dumps([{"key": "melk", "product_id": 101, "begrunnelse": "ok"}])
-    svar_nye = json.dumps([{"sok": "fiskesaus", "begrunnelse": "ok"}])
+    svar_nye = json.dumps({"profil": ["obs"],
+                           "forslag": [{"sok": "fiskesaus", "begrunnelse": "ok"}]})
     svar = iter([svar_sparetips, svar_nye])
     hits = {"melk": MELK_HITS,
             "fiskesaus": [{"product_id": 500, "name": "Fiskesaus", "price": 35.0, "image": None}]}
