@@ -4,13 +4,18 @@ FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 WORKDIR /app
 
-# Codex-CLI for LLM-forslagene (jf. min_oda/llm.py). Innloggingen ligger i
-# et eget volum (CODEX_HOME), se DEPLOY.md. Samme oppsett som avisa.
+# Codex-CLI for LLM-forslagene (jf. min_oda/llm.py): frittstående binær fra
+# GitHub-releasen, ikke npm-pakken — npm-veien drar med seg hele nodejs for
+# å installere det som uansett er én statisk Rust-binær. Innloggingen ligger
+# i et eget volum (CODEX_HOME), se DEPLOY.md.
 ARG CODEX_VERSION=0.147.0
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends nodejs npm \
-    && npm install -g "@openai/codex@${CODEX_VERSION}" \
-    && rm -rf /var/lib/apt/lists/*
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && case "$TARGETARCH" in arm64) arch=aarch64 ;; *) arch=x86_64 ;; esac \
+    && curl -fsSL "https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/codex-${arch}-unknown-linux-musl.tar.gz" \
+        | tar -xz -C /usr/local/bin \
+    && mv "/usr/local/bin/codex-${arch}-unknown-linux-musl" /usr/local/bin/codex \
+    && apt-get purge -y curl && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 # Deterministiske installasjoner, kopier heller enn symlink (bedre i containere).
 ENV UV_COMPILE_BYTECODE=1 \
