@@ -18,8 +18,13 @@ services:
     image: ${ODA_IMAGE:-ghcr.io/mhellevang/min-oda:latest}
     restart: unless-stopped
     env_file: .env
+    environment:
+      # Codex-innloggingen (LLM-forslag) bor i eget volum så den overlever
+      # image-oppdateringer. Engangs-login: se DEPLOY.md.
+      CODEX_HOME: /var/lib/codex
     volumes:
       - min-oda-data:/app/data
+      - codex-auth:/var/lib/codex
     # La Watchtower auto-oppdatere denne containeren når :latest endres i GHCR.
     # Scoped med label så Watchtower kun rører denne stacken.
     labels:
@@ -48,3 +53,4 @@ services:
 
 volumes:
   min-oda-data:
+  codex-auth:

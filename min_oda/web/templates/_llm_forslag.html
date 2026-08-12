@@ -1,0 +1,76 @@
+{# LLM-forslag: sparetips (billigere representant per varetype) og nye varer
+   å prøve. Rendres inline i handleliste.html; knappen re-rendrer hele
+   fragmentet via POST /handleliste/llm-forslag. Gjenbruker oda-sok-stilene. #}
+<div id="llm-forslag">
+  <div class="oda-sok-heading" style="display:flex;align-items:center;gap:10px;">
+    <h3 style="margin:0;">Forslag fra språkmodellen</h3>
+    <button type="button" class="oda-sok-btn"
+            hx-post="/handleliste/llm-forslag"
+            hx-target="#llm-forslag" hx-swap="outerHTML"
+            hx-disabled-elt="this"
+            hx-indicator="#llm-indikator"
+            title="Spør språkmodellen ({{ llm_provider() }}) om billigere alternativer og nye varer. Kan ta litt tid.">
+      {{ 'Oppdater forslag' if forslag else 'Hent forslag' }}
+    </button>
+    <span id="llm-indikator" class="htmx-indicator muted">spør {{ llm_provider() }} …</span>
+    {% if forslag and forslag.generert %}
+    <span class="muted">sist generert {{ forslag.generert|format_dato }}</span>
+    {% endif %}
+  </div>
+
+  {# Ved feil beholdes forrige vellykkede generering under feilmeldingen. #}
+  {% if forslag and forslag.feil %}
+  <p class="muted">{{ forslag.feil }}</p>
+  {% endif %}
+  {% if forslag and forslag.sparetips is defined %}
+
+  <h4 class="oda-sok-heading">Billigere alternativer</h4>
+  {% if forslag.sparetips %}
+  <ul class="oda-sok-results">
+    {% for p in forslag.sparetips %}
+    <li>
+      {% if p.image %}<img src="{{ p.image }}" alt="" loading="lazy">{% else %}<span class="oda-sok-noimg"></span>{% endif %}
+      <span class="oda-sok-name">{{ p.navn }}
+        <small class="muted">i stedet for {{ p.fra_navn }} (ca. {{ p.fra_pris|format_kr }}) — {{ p.begrunnelse }}</small>
+      </span>
+      <span class="muted nowrap">{{ p.pris|format_kr }}</span>
+      <button type="button" class="oda-sok-action"
+              hx-disabled-elt="this"
+              hx-post="/handleliste/velg-representant"
+              hx-vals='{"key": {{ p.key|tojson }}, "product_id": "{{ p.product_id }}", "name": {{ p.navn|tojson }}, "price": "{{ "%.2f"|format(p.pris) if p.pris is not none else "" }}", "image": {{ (p.image or "")|tojson }}}'
+              hx-include="closest form"
+              hx-target="#table-and-blocked" hx-swap="innerHTML"
+              title="Bruk denne som fast forslag for {{ p.key }}">Velg denne</button>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Ingen billigere fullgode alternativer funnet i katalogen.</p>
+  {% endif %}
+
+  <h4 class="oda-sok-heading">Verdt å prøve</h4>
+  {% if forslag.nye %}
+  <ul class="oda-sok-results">
+    {% for p in forslag.nye %}
+    <li>
+      {% if p.image %}<img src="{{ p.image }}" alt="" loading="lazy">{% else %}<span class="oda-sok-noimg"></span>{% endif %}
+      <span class="oda-sok-name">{{ p.navn }}
+        <small class="muted">{{ p.begrunnelse }}</small>
+      </span>
+      <span class="muted nowrap">{% if p.pris is not none %}{{ p.pris|format_kr }}{% else %}–{% endif %}</span>
+      <button type="button" class="oda-sok-action"
+              hx-disabled-elt="this"
+              hx-post="/handleliste/engangs-legg-til"
+              hx-vals='{"product_id": "{{ p.product_id }}", "name": {{ p.navn|tojson }}, "price": "{{ "%.2f"|format(p.pris) if p.pris is not none else "" }}", "image": {{ (p.image or "")|tojson }}}'
+              hx-include="closest form"
+              hx-target="#table-and-blocked" hx-swap="innerHTML"
+              title="Legg på lista som engangsvare (sendes til Oda først når du poster)">Legg på lista</button>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Ingen nye forslag denne gangen.</p>
+  {% endif %}
+
+  {% endif %}
+</div>

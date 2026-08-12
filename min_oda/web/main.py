@@ -28,7 +28,7 @@ from fastapi.templating import Jinja2Templates
 import math
 
 from . import auth
-from .. import blocklist, engangsvarer, representatives
+from .. import blocklist, engangsvarer, forslag, llm, representatives
 from ..build_list import curate
 from ..cart_diff import compute_diff, fetch_cart
 from ..data_loader import load_both
@@ -145,6 +145,8 @@ def _register_template_globals() -> None:
     å måtte legge det inn manuelt i hver TemplateResponse."""
     templates.env.globals["refresh_status"] = refresh_status_ctx
     templates.env.globals["auth_enabled"] = auth.auth_enabled
+    templates.env.globals["llm_enabled"] = llm.enabled
+    templates.env.globals["llm_provider"] = llm.provider_label
     templates.env.filters["format_age"] = format_age
     templates.env.filters["format_days_ago"] = format_days_ago
     templates.env.filters["format_kr"] = format_kr
@@ -749,7 +751,30 @@ def handleliste(
             "url_new_list": url_new_list,
             "blocked_items": blocklist.list_blocked(),
             "blocked_types": blocklist.list_blocked_types(),
+            "forslag": forslag.load_forslag() if llm.enabled() else None,
         },
+    )
+
+
+@app.post("/handleliste/llm-forslag", response_class=HTMLResponse)
+def handleliste_llm_forslag(request: Request) -> HTMLResponse:
+    """Generer LLM-forslag (sparetips + nye varer) og re-rendre fragmentet.
+    Bruker den fulle kuraterte lista (uavhengig av kurv-diffen) som grunnlag,
+    så tipsene ikke avhenger av hva som tilfeldigvis mangler akkurat nå.
+    Synkron og treg (CLI-LLM) — knappen har indikator og disables underveis."""
+    rows, _, _ = _build_rows(
+        get_lines(), DEFAULT_CYCLE, DEFAULT_TOP, DEFAULT_MAX_PER_CAT,
+        search="", new_list=True, top_up=False,
+    )
+    resultat = forslag.generer(rows, get_lines())
+    if "feil" in resultat:
+        # Behold forrige vellykkede generering synlig under feilmeldingen.
+        forrige = forslag.load_forslag()
+        if forrige:
+            forrige["feil"] = resultat["feil"]
+            resultat = forrige
+    return templates.TemplateResponse(
+        request, "_llm_forslag.html", {"forslag": resultat}
     )
 
 

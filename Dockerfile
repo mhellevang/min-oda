@@ -4,6 +4,14 @@ FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 WORKDIR /app
 
+# Codex-CLI for LLM-forslagene (jf. min_oda/llm.py). Innloggingen ligger i
+# et eget volum (CODEX_HOME), se DEPLOY.md. Samme oppsett som avisa.
+ARG CODEX_VERSION=0.147.0
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nodejs npm \
+    && npm install -g "@openai/codex@${CODEX_VERSION}" \
+    && rm -rf /var/lib/apt/lists/*
+
 # Deterministiske installasjoner, kopier heller enn symlink (bedre i containere).
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \

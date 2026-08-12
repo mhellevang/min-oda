@@ -57,6 +57,9 @@ CLOUDFLARE_TUNNEL_TOKEN=
 APP_PASSWORD=et-langt-delt-passord
 SESSION_SECRET=en-annen-lang-tilfeldig-streng
 COOKIE_SECURE=true
+
+# LLM-forslag (valgfritt, se steg 7). none slår funksjonene av.
+LLM_PROVIDER=auto
 ```
 
 Se `.env.example` for alle tilgjengelige variabler. `.env` blir aldri en del
@@ -120,6 +123,25 @@ docker compose -f docker-compose.truenas.yml up -d
 
 Ved oppstart logger appen seg inn mot Oda og henter ordrehistorikken. Åpne
 `https://oda.dittdomene.no`, logg inn via Cloudflare, og appen skal svare.
+
+## 7. Logg inn Codex (valgfritt, for LLM-forslag)
+
+Imaget har `codex`-CLI-en innebygd, og forslags-funksjonene på handlelista
+(sparetips + nye varer) bruker Codex-abonnementet. Engangs-innlogging inne i
+containeren:
+
+```sh
+docker compose -f docker-compose.truenas.yml exec min-oda \
+  codex login -c 'cli_auth_credentials_store="file"' --device-auth
+```
+
+Følg device-lenken i utskriften og logg inn med ChatGPT-kontoen. Innloggingen
+lagres i det egne volumet `codex-auth` (`CODEX_HOME=/var/lib/codex`) og
+overlever image-oppdateringer. Behandle volumet som en hemmelighet.
+
+Uten innlogging (eller med `LLM_PROVIDER=none`) forsvinner bare
+forslags-seksjonen fra UI-et, resten av appen er uendret. Sjekk status med
+`... exec min-oda codex login status`.
 
 ## Oppdatering (auto)
 

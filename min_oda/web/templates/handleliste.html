@@ -112,6 +112,10 @@
 
     <div id="oda-sok-general"></div>
 
+    {% if llm_enabled() %}
+    {% include "_llm_forslag.html" %}
+    {% endif %}
+
     <div class="create-row">
       {% if new_list %}
       <input type="text" name="title"

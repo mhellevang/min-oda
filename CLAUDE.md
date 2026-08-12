@@ -14,6 +14,8 @@ uv run pytest tests/test_restock.py     # single test file
 uv run pytest -k cadence                # filter by name
 uv run python -m min_oda.fetch_orders   # force a fresh fetch from oda.com
 uv run python -m min_oda.fetch_orders --url '<URL>'   # override endpoint if Oda changes it
+uv run python -m min_oda.klassifiser            # LLM-forslag til varetype for produkter regexen bommer på
+uv run python -m min_oda.klassifiser --apply    # skriv forslagene inn i data/product_types.json
 ```
 
 Web tests in `tests/test_web.py` skip when `data/orders.csv` is missing — that is expected in a fresh checkout.
@@ -46,6 +48,9 @@ All analysis modules accept DataFrames from `data_loader.load_both()` and return
 - `cart_diff.py:compute_diff(ideal, cart, top_up)` — joins curated list against the live cart *by varetype, not product_id*. Default returns only varetypes missing from the cart. `top_up=True` also includes those with too-low quantity.
 - `representatives.py` — valgt representant per varetype i `data/chosen_products.json` (gitignored): brukeren kan peke ut en katalogvare (aldri kjøpt) som fast forslag for en varetype. `chosen_representatives()` mates inn i `curate(chosen=)` og overstyrer mest-kjøpt-valget til det fjernes; `pinned_types()` konsulteres av `product_type()` så det valgte produktet klassifiseres til varetypen det ble valgt for (fremtidige kjøp teller i riktig kadens). Snapshot av navn/pris/bilde lagres fra søketreffet siden varen ikke finnes i CSV-ene.
 - `engangsvarer.py` — lokal huskeliste for katalogtreff utenfor kadenslogikken (`data/engangsvarer.json`, gitignored). «Legg på lista» i katalogsøket lagrer her (`add`, gjentatt klikk øker antall), radene rendres i handlelista via `_engangs_rows()`, og `remove_posted()` tømmer det som gikk gjennom i en bulk-post. Ingenting sendes til Oda før bulk-knappen.
+- `llm.py` — tynt lag over lokale LLM-CLI-er, portet fra avisa. `LLM_PROVIDER` i `.env` styrer: `auto` (codex hvis installert, ellers claude, ellers av), `codex_cli`, `claude_cli`, `none`. `chat(system, user)` kjører én tur via subprocess (codex låst til ren tekstgenerering: read-only sandbox, verktøy av, datadelen merket som untrusted), `extract_json()` parser svar robust. Appen fungerer fullt ut uten LLM — `enabled()` styrer om forslags-UI-et vises i det hele tatt.
+- `forslag.py` — LLM-forslag til handlelista, alltid forankret i katalogsøket (LLM-en velger bare blant faktiske søketreff, aldri frie produktnavn). To deler: sparetips (billigere katalogtreff per varetype, LLM-en dømmer substituerbarhet mot sist betalt enhetspris) og nye varer (LLM foreslår søkeord fra kjøpsprofilen, treffene valideres mot katalogen). `generer()` caches i `data/llm_forslag.json` (gitignored); ved LLM-svikt beholdes forrige generering. `chat`/`search` injiseres i tester.
+- `klassifiser.py` — CLI som ber LLM-en foreslå varetype for produkter uten eksplisitt mapping eller keyword-treff (de som ender i grov kategori-fallback), med eksisterende varetyper som vokabular. `--apply` skriver inn i `data/product_types.json`; se over git-diffen før commit.
 - `blocklist.py` — to JSON-backede blokklister. Produktnivå i `data/blocklist.json` (`block(pid)` / `unblock(pid)` / `blocked_ids()` / `list_blocked()`) blokkerer én variant, så en annen variant av samme varetype kan overta. Varetypenivå i `data/blocked_types.json` (`block_type(key)` / `unblock_type(key)` / `blocked_types()` / `list_blocked_types()`) skjuler hele varetypen fra forslag. `curate()` tar begge (`blocked=` og `blocked_types=`).
 
 ### Web app (`min_oda/web/`)
@@ -60,7 +65,7 @@ FastAPI + Jinja2 + HTMX. Two pages:
 
 State is cached in module-level globals (`_ORDERS`, `_LINES`, `_CART`, `_BASKET_CACHE`, `_BASELINE_IDS`). `invalidate_caches()` resets all of them and is called after a successful `POST /refresh`; `invalidate_blocklist_caches()` resets only the baseline ids after a block/unblock. The cart has its own 120 s TTL.
 
-HTMX endpoints (`/handleliste/table`, `/handleliste/block`, `/handleliste/unblock`, `/handleliste/oda-sok`, `/handleliste/bytt`, `/handleliste/engangs-legg-til`, `/handleliste/engangs-fjern`, `/handleliste/velg-representant`, `/handleliste/fjern-representant`, `/innsikt/basket-lookup`) return template fragments (files prefixed with `_`). Katalogsøket har to innganger: «Søk hos Oda»-knappen ved søkefeltet (treff legges på den lokale lista som engangsvarer) og ⇄-knappen på hver rad (byttepanel som setter valgt representant for radens varetype). Ingenting postes til Oda før bulk-knappene (legg i kurv / send som liste), som også fjerner postede engangsvarer fra den lokale lista.
+HTMX endpoints (`/handleliste/table`, `/handleliste/block`, `/handleliste/unblock`, `/handleliste/oda-sok`, `/handleliste/bytt`, `/handleliste/engangs-legg-til`, `/handleliste/engangs-fjern`, `/handleliste/velg-representant`, `/handleliste/fjern-representant`, `/handleliste/llm-forslag`, `/innsikt/basket-lookup`) return template fragments (files prefixed with `_`). Katalogsøket har to innganger: «Søk hos Oda»-knappen ved søkefeltet (treff legges på den lokale lista som engangsvarer) og ⇄-knappen på hver rad (byttepanel som setter valgt representant for radens varetype). Ingenting postes til Oda før bulk-knappene (legg i kurv / send som liste), som også fjerner postede engangsvarer fra den lokale lista. LLM-forslagene (`_llm_forslag.html`, kun synlig når `llm.enabled()`) gjenbruker velg-representant- og engangs-legg-til-flytene for handlingene sine.
 
 The CLI entrypoint is `min_oda.web.cli:run` (registered in `pyproject.toml` as `[project.scripts] min-oda`). It just wraps `uvicorn.run(...)`.
 
@@ -82,7 +87,7 @@ Passord-login (`auth.login_with_password`): hent `csrftoken`-cookie fra `GET htt
 
 ## Server-deploy
 
-To compose-filer: `docker-compose.yml` (lokal dev, `build: .` + tagger som GHCR-imaget) og `docker-compose.truenas.yml` (prod: henter ferdig image fra GHCR, + `cloudflared` + `watchtower`). `docker-entrypoint.sh` sår `data/product_types.json` inn i et tomt volum. Passord-login er auth-kilden i denne modusen (ingen nettleser for rookiepy).
+To compose-filer: `docker-compose.yml` (lokal dev, `build: .` + tagger som GHCR-imaget) og `docker-compose.truenas.yml` (prod: henter ferdig image fra GHCR, + `cloudflared` + `watchtower`). `docker-entrypoint.sh` sår `data/product_types.json` inn i et tomt volum. Passord-login er auth-kilden i denne modusen (ingen nettleser for rookiepy). Imaget har `codex`-CLI-en innebygd for LLM-forslagene; innloggingen bor i volumet `codex-auth` (`CODEX_HOME=/var/lib/codex`), engangs device-login beskrevet i `DEPLOY.md`.
 
 Autodeploy (samme mønster som avisa): `.github/workflows/build.yml` bygger og pusher `ghcr.io/mhellevang/min-oda:latest` ved push til `main` (PR-er bygger uten push). NAS-en sitter bak NAT, så `watchtower` poller GHCR hvert 5. min og recreater containeren når `:latest` endres. Ingen app-hemmeligheter i CI, ingen SSH-deploy. Full guide i `DEPLOY.md`.
 
