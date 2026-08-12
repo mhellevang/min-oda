@@ -1,0 +1,62 @@
+{# LLM-innsikt: «siden sist» + navngitte måltidsmønstre. Samme livssyklus
+   som _llm_forslag.html: bakgrunnsjobb startet på sidelast når cachen er
+   gammel, polling mens den kjører, forrige generering synlig imens.
+   Tallene per mønster (n ordrer, sist, intervall) er regnet deterministisk
+   i innsikt_llm.py — modellen har bare navngitt mønsteret. #}
+<section id="monstre"
+     {% if innsikt_llm_kjorer %}
+     hx-get="/innsikt/llm"
+     hx-trigger="every 5s"
+     hx-target="this" hx-swap="outerHTML"
+     {% endif %}>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <h2 style="margin:0;">Mønstre og endringer</h2>
+    {% if innsikt_llm_kjorer %}
+    <span class="muted">genererer ({{ llm_provider() }}) …</span>
+    {% else %}
+    <button type="button" class="oda-sok-btn"
+            hx-post="/innsikt/llm"
+            hx-target="#monstre" hx-swap="outerHTML"
+            hx-disabled-elt="this"
+            title="Les mønstre og endringer ut av ordrehistorikken på nytt. Kjører i bakgrunnen.">
+      {{ 'Oppdater' if innsikt_llm else 'Generer' }}
+    </button>
+    {% endif %}
+    {% if innsikt_llm and innsikt_llm.generert %}
+    <span class="muted">sist generert {{ innsikt_llm.generert|format_dato }}</span>
+    {% endif %}
+  </div>
+  <p class="muted">
+    Språkmodellen navngir mønstre i handleturene; antall og datoer er regnet
+    fra ordrene, ikke av modellen.
+  </p>
+
+  {% if innsikt_llm_feil and not innsikt_llm_kjorer %}
+  <p class="muted">{{ innsikt_llm_feil }}</p>
+  {% endif %}
+
+  {% if innsikt_llm and innsikt_llm.monstre is defined %}
+
+  {% if innsikt_llm.siden_sist %}
+  <h3>Siden sist</h3>
+  <p>{{ innsikt_llm.siden_sist }}</p>
+  {% endif %}
+
+  {% if innsikt_llm.monstre %}
+  <h3>Måltidsmønstre</h3>
+  <ul class="monstre-liste">
+    {% for m in innsikt_llm.monstre %}
+    <li>
+      <strong>{{ m.navn }}</strong>
+      <span class="muted">— {{ m.varetyper|join(', ') }}</span><br>
+      {{ m.n_ordrer }} ordrer, sist {{ m.sist|format_dato }}{% if m.intervall_dager %}, ca. hver {{ m.intervall_dager }}. dag{% endif %}.
+      {% if m.kommentar %}<span class="muted">{{ m.kommentar }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Ingen mønstre med nok støtte i ordrene ennå.</p>
+  {% endif %}
+
+  {% endif %}
+</section>

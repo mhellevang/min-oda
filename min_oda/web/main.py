@@ -28,7 +28,7 @@ from fastapi.templating import Jinja2Templates
 import math
 
 from . import auth
-from .. import blocklist, engangsvarer, forslag, llm, representatives
+from .. import blocklist, engangsvarer, forslag, innsikt_llm, llm, representatives
 from ..build_list import curate
 from ..cart_diff import compute_diff, fetch_cart
 from ..data_loader import load_both
@@ -1217,6 +1217,39 @@ async def handleliste_add_to_cart(request: Request) -> HTMLResponse:
 # ---------- /innsikt -----------------------------------------------------
 
 
+def _innsikt_llm_ctx(auto_start: bool = False) -> dict:
+    """Template-kontekst for _innsikt_llm.html. Samme mønster som
+    _forslag_ctx: sidelast starter en generering hvis cachen er gammel."""
+    if not llm.enabled():
+        return {"innsikt_llm": None, "innsikt_llm_kjorer": False,
+                "innsikt_llm_feil": None}
+    if auto_start and not innsikt_llm.er_i_gang() and not innsikt_llm.er_ferskt():
+        innsikt_llm.start_bakgrunnsjobb(get_lines())
+    return {
+        "innsikt_llm": innsikt_llm.load_innsikt(),
+        "innsikt_llm_kjorer": innsikt_llm.er_i_gang(),
+        "innsikt_llm_feil": innsikt_llm.siste_feil(),
+    }
+
+
+@app.get("/innsikt/llm", response_class=HTMLResponse)
+def innsikt_llm_status(request: Request) -> HTMLResponse:
+    """Polles av fragmentet mens genereringen kjører."""
+    return templates.TemplateResponse(
+        request, "_innsikt_llm.html", _innsikt_llm_ctx()
+    )
+
+
+@app.post("/innsikt/llm", response_class=HTMLResponse)
+def innsikt_llm_regenerer(request: Request) -> HTMLResponse:
+    """Tving en ny generering (Oppdater-knappen), uavhengig av cache-alder."""
+    if llm.enabled() and not innsikt_llm.er_i_gang():
+        innsikt_llm.start_bakgrunnsjobb(get_lines())
+    return templates.TemplateResponse(
+        request, "_innsikt_llm.html", _innsikt_llm_ctx()
+    )
+
+
 @app.get("/innsikt", response_class=HTMLResponse)
 def innsikt_page(request: Request, q: str = "") -> HTMLResponse:
     orders, lines = get_orders_and_lines()
@@ -1250,6 +1283,7 @@ def innsikt_page(request: Request, q: str = "") -> HTMLResponse:
             "basket_support": innsikt.top_support_pairs(pairs, name_map),
             "basket_q": q,
             "basket_lookup": basket_lookup,
+            **_innsikt_llm_ctx(auto_start=True),
         },
     )
 

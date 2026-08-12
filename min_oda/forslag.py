@@ -14,7 +14,6 @@ merker dem som ca.-priser.
 from __future__ import annotations
 
 import json
-import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -22,6 +21,7 @@ import httpx
 import pandas as pd
 
 from . import llm
+from .bakgrunnsjobb import Jobb
 from .oda_client import search_products
 
 DATA_DIR = Path(__file__).parent.parent / "data"
@@ -31,18 +31,15 @@ _MAX_SPARETIPS_RADER = 25
 _MAX_KANDIDATER_PER_TYPE = 4
 FERSK_TIMER = 24.0
 
-_JOBB_LOCK = threading.Lock()
-_KJORER = False
-_SISTE_FEIL: str | None = None
+_JOBB = Jobb("llm-forslag")
 
 
 def er_i_gang() -> bool:
-    return _KJORER
+    return _JOBB.er_i_gang()
 
 
 def siste_feil() -> str | None:
-    """Feilmelding fra forrige kjøring, None hvis den lyktes."""
-    return _SISTE_FEIL
+    return _JOBB.siste_feil()
 
 
 def er_ferskt(max_age_hours: float = FERSK_TIMER) -> bool:
@@ -56,30 +53,11 @@ def er_ferskt(max_age_hours: float = FERSK_TIMER) -> bool:
     return alder.total_seconds() < max_age_hours * 3600
 
 
-def start_bakgrunnsjobb(rows: list[dict], lines,
-                        chat=None, search=None) -> threading.Thread | None:
-    """Start generer() i en daemon-tråd. Returnerer tråden, eller None hvis
-    en jobb allerede kjører (single-flight). `rows`/`lines` beregnes av
-    kalleren i request-konteksten; tråden rører ingen web-cacher."""
-    global _KJORER
-    with _JOBB_LOCK:
-        if _KJORER:
-            return None
-        _KJORER = True
-
-    def _run() -> None:
-        global _KJORER, _SISTE_FEIL
-        try:
-            resultat = generer(rows, lines, chat=chat, search=search)
-            _SISTE_FEIL = resultat.get("feil")
-        except Exception as e:  # en trådkrasj må aldri låse jobben
-            _SISTE_FEIL = f"Genereringen feilet: {e}"
-        finally:
-            _KJORER = False
-
-    t = threading.Thread(target=_run, daemon=True, name="llm-forslag")
-    t.start()
-    return t
+def start_bakgrunnsjobb(rows: list[dict], lines, chat=None, search=None):
+    """Start generer() i en daemon-tråd (single-flight, jf. bakgrunnsjobb).
+    `rows`/`lines` beregnes av kalleren i request-konteksten; tråden rører
+    ingen web-cacher."""
+    return _JOBB.start(lambda: generer(rows, lines, chat=chat, search=search))
 
 
 def load_forslag() -> dict | None:

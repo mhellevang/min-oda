@@ -12,6 +12,7 @@
 {# ---------- nøkkeltall ---------- #}
 <nav class="toc" aria-label="Snarveier">
   <a href="#nokkeltall">Nøkkeltall</a>
+  {% if llm_enabled() %}<a href="#monstre">Mønstre</a>{% endif %}
   {% if monthly %}<a href="#forbruk">Forbruk</a>{% endif %}
   {% if staples %}<a href="#dna">Husstandens DNA</a>{% endif %}
   {% if cuisines %}<a href="#matkultur">Matkultur</a>{% endif %}
@@ -48,6 +49,11 @@
     </div>
   </div>
 </section>
+
+{# ---------- LLM: siden sist + måltidsmønstre ---------- #}
+{% if llm_enabled() %}
+{% include "_innsikt_llm.html" %}
+{% endif %}
 
 {# ---------- månedlig forbruk ---------- #}
 {% if monthly %}
