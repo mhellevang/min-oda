@@ -2,15 +2,19 @@
 og nye varer å prøve. Begge er forankret i Odas katalogsøk — LLM-en velger
 bare blant faktiske søketreff, så den kan aldri foreslå varer som ikke finnes.
 
-Genereres on-demand fra en knapp i UI-et og caches i data/llm_forslag.json
-(gitignored), så sidevisninger aldri koster LLM-kall. Priser sammenlignes
-mot sist betalt enhetspris (jf. prices.py), som kan være litt utdatert —
-UI-et merker dem som ca.-priser.
+Genereringen tar minutter (CLI-LLM + katalogsøk), så den kjører alltid i en
+bakgrunnstråd: sidelast starter den automatisk når cachen i
+data/llm_forslag.json (gitignored) er eldre enn et døgn, og fragmentet i
+UI-et poller til den er ferdig. Ingen request venter på LLM-en — viktig bak
+Cloudflare-tunnelen, som kutter svar etter ~100 s. Priser sammenlignes mot
+sist betalt enhetspris (jf. prices.py), som kan være litt utdatert — UI-et
+merker dem som ca.-priser.
 """
 
 from __future__ import annotations
 
 import json
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -25,6 +29,57 @@ FORSLAG_FILE = DATA_DIR / "llm_forslag.json"
 
 _MAX_SPARETIPS_RADER = 25
 _MAX_KANDIDATER_PER_TYPE = 4
+FERSK_TIMER = 24.0
+
+_JOBB_LOCK = threading.Lock()
+_KJORER = False
+_SISTE_FEIL: str | None = None
+
+
+def er_i_gang() -> bool:
+    return _KJORER
+
+
+def siste_feil() -> str | None:
+    """Feilmelding fra forrige kjøring, None hvis den lyktes."""
+    return _SISTE_FEIL
+
+
+def er_ferskt(max_age_hours: float = FERSK_TIMER) -> bool:
+    f = load_forslag()
+    if not f or not f.get("generert"):
+        return False
+    try:
+        alder = datetime.now() - datetime.fromisoformat(f["generert"])
+    except ValueError:
+        return False
+    return alder.total_seconds() < max_age_hours * 3600
+
+
+def start_bakgrunnsjobb(rows: list[dict], lines,
+                        chat=None, search=None) -> threading.Thread | None:
+    """Start generer() i en daemon-tråd. Returnerer tråden, eller None hvis
+    en jobb allerede kjører (single-flight). `rows`/`lines` beregnes av
+    kalleren i request-konteksten; tråden rører ingen web-cacher."""
+    global _KJORER
+    with _JOBB_LOCK:
+        if _KJORER:
+            return None
+        _KJORER = True
+
+    def _run() -> None:
+        global _KJORER, _SISTE_FEIL
+        try:
+            resultat = generer(rows, lines, chat=chat, search=search)
+            _SISTE_FEIL = resultat.get("feil")
+        except Exception as e:  # en trådkrasj må aldri låse jobben
+            _SISTE_FEIL = f"Genereringen feilet: {e}"
+        finally:
+            _KJORER = False
+
+    t = threading.Thread(target=_run, daemon=True, name="llm-forslag")
+    t.start()
+    return t
 
 
 def load_forslag() -> dict | None:

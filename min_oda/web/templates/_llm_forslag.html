@@ -1,27 +1,37 @@
 {# LLM-forslag: sparetips (billigere representant per varetype) og nye varer
-   å prøve. Rendres inline i handleliste.html; knappen re-rendrer hele
-   fragmentet via POST /handleliste/llm-forslag. Gjenbruker oda-sok-stilene. #}
-<div id="llm-forslag">
+   å prøve. Genereringen kjører i en bakgrunnstråd (startet på sidelast når
+   cachen er gammel, eller av Oppdater-knappen); mens den kjører poller hele
+   fragmentet GET /handleliste/llm-forslag til den er ferdig. Forrige
+   generering vises imens. Gjenbruker oda-sok-stilene. #}
+<div id="llm-forslag"
+     {% if forslag_kjorer %}
+     hx-get="/handleliste/llm-forslag"
+     hx-trigger="every 5s"
+     hx-target="this" hx-swap="outerHTML"
+     {% endif %}>
   <div class="oda-sok-heading" style="display:flex;align-items:center;gap:10px;">
     <h3 style="margin:0;">Forslag fra språkmodellen</h3>
+    {% if forslag_kjorer %}
+    <span class="muted">genererer forslag ({{ llm_provider() }}) …</span>
+    {% else %}
     <button type="button" class="oda-sok-btn"
             hx-post="/handleliste/llm-forslag"
             hx-target="#llm-forslag" hx-swap="outerHTML"
             hx-disabled-elt="this"
-            hx-indicator="#llm-indikator"
-            title="Spør språkmodellen ({{ llm_provider() }}) om billigere alternativer og nye varer. Kan ta litt tid.">
+            title="Spør språkmodellen ({{ llm_provider() }}) om billigere alternativer og nye varer. Kjører i bakgrunnen.">
       {{ 'Oppdater forslag' if forslag else 'Hent forslag' }}
     </button>
-    <span id="llm-indikator" class="htmx-indicator muted">spør {{ llm_provider() }} …</span>
+    {% endif %}
     {% if forslag and forslag.generert %}
     <span class="muted">sist generert {{ forslag.generert|format_dato }}</span>
     {% endif %}
   </div>
 
-  {# Ved feil beholdes forrige vellykkede generering under feilmeldingen. #}
-  {% if forslag and forslag.feil %}
-  <p class="muted">{{ forslag.feil }}</p>
+  {% if forslag_feil and not forslag_kjorer %}
+  {# Forrige vellykkede generering beholdes synlig under feilmeldingen. #}
+  <p class="muted">{{ forslag_feil }}</p>
   {% endif %}
+
   {% if forslag and forslag.sparetips is defined %}
 
   <h4 class="oda-sok-heading">Billigere alternativer</h4>

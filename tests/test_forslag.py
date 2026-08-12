@@ -2,6 +2,8 @@
 ekte LLM- eller Oda-kall."""
 
 import json
+import threading
+from datetime import datetime
 
 import pandas as pd
 import pytest
@@ -101,6 +103,41 @@ def test_generer_skriver_cache(tmp_path, monkeypatch, rows, lines):
     assert resultat["sparetips"][0]["product_id"] == 101
     assert resultat["nye"][0]["product_id"] == 500
     assert forslag.load_forslag() == resultat
+
+
+def test_er_ferskt(tmp_path, monkeypatch):
+    fil = tmp_path / "llm_forslag.json"
+    monkeypatch.setattr(forslag, "FORSLAG_FILE", fil)
+    assert not forslag.er_ferskt()  # ingen fil
+    fil.write_text(json.dumps(
+        {"generert": datetime.now().isoformat(timespec="minutes")}
+    ))
+    assert forslag.er_ferskt()
+    fil.write_text(json.dumps({"generert": "2026-01-01T00:00"}))
+    assert not forslag.er_ferskt()
+
+
+def test_bakgrunnsjobb_single_flight(tmp_path, monkeypatch, rows, lines):
+    monkeypatch.setattr(forslag, "FORSLAG_FILE", tmp_path / "llm_forslag.json")
+    startet = threading.Event()
+    slipp = threading.Event()
+
+    def treg_chat(s, u, max_tokens):
+        startet.set()
+        slipp.wait(5)
+        return None
+
+    search = _search({"melk": MELK_HITS})
+    t = forslag.start_bakgrunnsjobb(rows, lines, chat=treg_chat, search=search)
+    assert t is not None
+    assert startet.wait(5)
+    assert forslag.er_i_gang()
+    # Single-flight: jobb nummer to avvises mens den første kjører.
+    assert forslag.start_bakgrunnsjobb(rows, lines, chat=treg_chat, search=search) is None
+    slipp.set()
+    t.join(5)
+    assert not forslag.er_i_gang()
+    assert forslag.siste_feil()  # chat ga None -> feilen er registrert
 
 
 def test_generer_feil_roerer_ikke_cache(tmp_path, monkeypatch, rows, lines):

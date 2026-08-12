@@ -751,30 +751,53 @@ def handleliste(
             "url_new_list": url_new_list,
             "blocked_items": blocklist.list_blocked(),
             "blocked_types": blocklist.list_blocked_types(),
-            "forslag": forslag.load_forslag() if llm.enabled() else None,
+            **_forslag_ctx(auto_start=True),
         },
+    )
+
+
+def _start_forslag_jobb() -> None:
+    """Start bakgrunnsgenerering av LLM-forslag. Grunnlaget er den fulle
+    kuraterte lista (uavhengig av kurv-diffen), så tipsene ikke avhenger av
+    hva som tilfeldigvis mangler akkurat nå."""
+    rows, _, _ = _build_rows(
+        get_lines(), DEFAULT_CYCLE, DEFAULT_TOP, DEFAULT_MAX_PER_CAT,
+        search="", new_list=True, top_up=False,
+    )
+    forslag.start_bakgrunnsjobb(rows, get_lines())
+
+
+def _forslag_ctx(auto_start: bool = False) -> dict:
+    """Template-kontekst for _llm_forslag.html. `auto_start=True` (sidelast)
+    sparker i gang en generering hvis cachen er over et døgn gammel — innen
+    brukeren har jobbet seg gjennom lista er den typisk ferdig."""
+    if not llm.enabled():
+        return {"forslag": None, "forslag_kjorer": False, "forslag_feil": None}
+    if auto_start and not forslag.er_i_gang() and not forslag.er_ferskt():
+        _start_forslag_jobb()
+    return {
+        "forslag": forslag.load_forslag(),
+        "forslag_kjorer": forslag.er_i_gang(),
+        "forslag_feil": forslag.siste_feil(),
+    }
+
+
+@app.get("/handleliste/llm-forslag", response_class=HTMLResponse)
+def handleliste_llm_forslag_status(request: Request) -> HTMLResponse:
+    """Polles av fragmentet mens genereringen kjører."""
+    return templates.TemplateResponse(
+        request, "_llm_forslag.html", _forslag_ctx()
     )
 
 
 @app.post("/handleliste/llm-forslag", response_class=HTMLResponse)
 def handleliste_llm_forslag(request: Request) -> HTMLResponse:
-    """Generer LLM-forslag (sparetips + nye varer) og re-rendre fragmentet.
-    Bruker den fulle kuraterte lista (uavhengig av kurv-diffen) som grunnlag,
-    så tipsene ikke avhenger av hva som tilfeldigvis mangler akkurat nå.
-    Synkron og treg (CLI-LLM) — knappen har indikator og disables underveis."""
-    rows, _, _ = _build_rows(
-        get_lines(), DEFAULT_CYCLE, DEFAULT_TOP, DEFAULT_MAX_PER_CAT,
-        search="", new_list=True, top_up=False,
-    )
-    resultat = forslag.generer(rows, get_lines())
-    if "feil" in resultat:
-        # Behold forrige vellykkede generering synlig under feilmeldingen.
-        forrige = forslag.load_forslag()
-        if forrige:
-            forrige["feil"] = resultat["feil"]
-            resultat = forrige
+    """Tving en ny generering (Oppdater-knappen), uavhengig av cache-alder.
+    Returnerer med en gang — fragmentet poller til jobben er ferdig."""
+    if llm.enabled() and not forslag.er_i_gang():
+        _start_forslag_jobb()
     return templates.TemplateResponse(
-        request, "_llm_forslag.html", {"forslag": resultat}
+        request, "_llm_forslag.html", _forslag_ctx()
     )
 
 
