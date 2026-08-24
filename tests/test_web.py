@@ -23,9 +23,10 @@ pytestmark = pytest.mark.skipif(
 def client():
     # Importer etter at skip-sjekken har gått, slik at en tom data-mappe
     # ikke krasjer på import.
-    from min_oda.web.main import app, invalidate_caches
+    from min_oda.web import lager
+    from min_oda.web.main import app
 
-    invalidate_caches()
+    lager.endret(lager.DATA)
     with TestClient(app) as c:
         yield c
 

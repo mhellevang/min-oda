@@ -25,7 +25,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import auth
+from . import auth, lager
 from .. import (
     blocklist,
     engangsvarer,
@@ -35,16 +35,11 @@ from .. import (
     llm,
     representatives,
 )
-from ..build_list import curate
-from ..cart_diff import fetch_cart
-from ..data_loader import load_both
 from ..fetch_orders import maybe_refresh_data
 from ..handleliste import (
     DEFAULT_CYCLE,
     DEFAULT_MAX_PER_CAT,
     DEFAULT_TOP,
-    EMPTY_CART,
-    Kilder,
     Liste,
     Valg,
     bygg,
@@ -52,17 +47,13 @@ from ..handleliste import (
     variant_rad,
     varianter_for,
 )
-from ..images import latest_product_images
-from ..prices import latest_unit_prices
 from ..oda_client import (
-    MissingCredentials,
     add_products,
     add_to_cart,
     build_client,
     create_list,
     search_products,
 )
-from ..restock import compute_cadence
 
 log = logging.getLogger("min-oda")
 
@@ -172,19 +163,6 @@ def _register_template_globals() -> None:
 
 # Registrert i bunnen av modulen, etter at refresh_status_ctx er definert.
 
-_ORDERS: pd.DataFrame | None = None
-_LINES: pd.DataFrame | None = None  # date er joined fra orders — brukes av både /handleliste og /innsikt
-_BASKET_CACHE: tuple | None = None
-_CART: pd.DataFrame | None = None
-_CART_TIME = 0.0
-_CART_TTL = 120.0
-
-
-_BASELINE_IDS: set[int] | None = None
-_CADENCE_BY_TYPE: pd.DataFrame | None = None
-_PRICE_MAP: dict[int, float] | None = None
-_IMAGE_MAP: dict[int, str] | None = None
-
 _REFRESH_STATUS: dict = {
     "refreshed": False,
     "data_age_hours": None,
@@ -248,129 +226,6 @@ def refresh_status_ctx() -> dict:
     }
 
 
-def invalidate_caches() -> None:
-    """Nullstill alle in-memory caches — kalles etter en vellykket refresh."""
-    global _LINES, _ORDERS, _CART, _BASELINE_IDS, _BASKET_CACHE, _CADENCE_BY_TYPE
-    global _PRICE_MAP, _IMAGE_MAP
-    _LINES = None
-    _ORDERS = None
-    _CART = None
-    _BASELINE_IDS = None
-    _BASKET_CACHE = None
-    _CADENCE_BY_TYPE = None
-    _PRICE_MAP = None
-    _IMAGE_MAP = None
-
-
-def invalidate_cart_cache() -> None:
-    """Tving en frisk fetch_cart() ved neste lesing — kalles etter at vi
-    har lagt noe i kurven."""
-    global _CART, _CART_TIME
-    _CART = None
-    _CART_TIME = 0.0
-
-
-def _load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
-    global _ORDERS, _LINES
-    if _ORDERS is None or _LINES is None:
-        _ORDERS, _LINES = load_both()
-    return _ORDERS, _LINES
-
-
-def get_lines() -> pd.DataFrame:
-    return _load_data()[1]
-
-
-def get_cart() -> pd.DataFrame:
-    """Hent handlekurv fra Oda. Hvis cookies mangler, returner tom kurv så
-    siden fortsatt rendrer. Auth-banneret over forteller brukeren hva som
-    er galt."""
-    global _CART, _CART_TIME
-    if _CART is None or (time() - _CART_TIME) > _CART_TTL:
-        try:
-            _CART = fetch_cart(build_client())
-        except MissingCredentials:
-            _CART = EMPTY_CART
-        _CART_TIME = time()
-    return _CART
-
-
-def get_orders_and_lines() -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load orders + lines (med date joined) — cached. For /innsikt."""
-    return _load_data()
-
-
-def get_basket() -> tuple:
-    """Cache de tunge basket-parene — disse er O(n²) i antall vanlige
-    produkter, så bare regn én gang per data-reload."""
-    global _BASKET_CACHE
-    if _BASKET_CACHE is None:
-        _, lines = get_orders_and_lines()
-        _BASKET_CACHE = innsikt.basket_pairs(lines)
-    return _BASKET_CACHE
-
-
-def get_cadence_by_type() -> pd.DataFrame:
-    """Cache compute_cadence(by_type=True) — beregnes én gang per
-    data-reload og brukes av både rad-bygger og variant-endepunktene."""
-    global _CADENCE_BY_TYPE
-    if _CADENCE_BY_TYPE is None:
-        _CADENCE_BY_TYPE = compute_cadence(get_lines(), by_type=True)
-    return _CADENCE_BY_TYPE
-
-
-def get_price_map() -> dict[int, float]:
-    """Cache sist-betalt-pris per produkt — beregnes én gang per data-reload."""
-    global _PRICE_MAP
-    if _PRICE_MAP is None:
-        _PRICE_MAP = latest_unit_prices(get_lines())
-    return _PRICE_MAP
-
-
-def get_image_map() -> dict[int, str]:
-    """Cache bilde-URL per produkt — beregnes én gang per data-reload."""
-    global _IMAGE_MAP
-    if _IMAGE_MAP is None:
-        _IMAGE_MAP = latest_product_images(get_lines())
-    return _IMAGE_MAP
-
-
-def get_baseline_ids() -> set[int]:
-    """Produkt-id-er som er med ved default-filtre — brukes til å markere
-    rader som *kommer til* når brukeren utvider filtrene."""
-    global _BASELINE_IDS
-    if _BASELINE_IDS is None:
-        baseline = curate(
-            get_lines(),
-            list_cycle_days=DEFAULT_CYCLE,
-            top_n=DEFAULT_TOP,
-            max_per_category=DEFAULT_MAX_PER_CAT,
-            blocked=blocklist.blocked_ids(),
-            blocked_types=blocklist.blocked_types(),
-            chosen=representatives.chosen_representatives(),
-        )
-        _BASELINE_IDS = (
-            {int(x) for x in baseline["product_id"]}
-            if not baseline.empty
-            else set()
-        )
-    return _BASELINE_IDS
-
-
-def invalidate_blocklist_caches() -> None:
-    """Etter en blokk/avblokk er baseline ikke lenger riktig."""
-    global _BASELINE_IDS
-    _BASELINE_IDS = None
-
-
-def invalidate_representative_caches() -> None:
-    """Etter velg/fjern representant. Kadensen må også nullstilles:
-    pinningen kan omklassifisere et produkt som finnes i historikken."""
-    global _BASELINE_IDS, _CADENCE_BY_TYPE
-    _BASELINE_IDS = None
-    _CADENCE_BY_TYPE = None
-
-
 def _mode_urls(valg: Valg) -> tuple[str, str]:
     """Bygg URL-er for modus-bytte som preserverer ikke-default filtre."""
     base: dict[str, str | int] = {}
@@ -395,22 +250,13 @@ def _mode_urls(valg: Valg) -> tuple[str, str]:
     return url_diff, url_new_list
 
 
-def _kilder() -> Kilder:
-    """De cachede oppslagene rad-byggingen trenger."""
-    return Kilder(
-        priser=get_price_map(),
-        bilder=get_image_map(),
-        baseline_ids=get_baseline_ids(),
-    )
-
-
 def _liste(valg: Valg) -> Liste:
     """Handlelista for valgte filtre (jf. handleliste.bygg)."""
     return bygg(
-        get_lines(),
+        lager.lines(),
         valg,
-        kurv=None if valg.new_list else get_cart(),
-        kilder=_kilder(),
+        kurv=None if valg.new_list else lager.kurv(),
+        kilder=lager.kilder(),
     )
 
 
@@ -435,13 +281,13 @@ def _render_variant_row(
     """Rendre én _list_row.html for (varetype, pid). Tom HTML hvis vi ikke
     finner kadens for typen eller pid-en."""
     rad = variant_rad(
-        get_lines(),
-        get_cadence_by_type(),
+        lager.lines(),
+        lager.kadens(),
         key,
         pid,
         valg,
-        kurv=None if valg.new_list else get_cart(),
-        kilder=_kilder(),
+        kurv=None if valg.new_list else lager.kurv(),
+        kilder=lager.kilder(),
         is_added_variant=is_added_variant,
     )
     if rad is None:
@@ -465,7 +311,7 @@ def refresh(request: Request) -> HTMLResponse:
     global _REFRESH_STATUS
     _REFRESH_STATUS = maybe_refresh_data(force=True)
     if _REFRESH_STATUS.get("refreshed"):
-        invalidate_caches()
+        lager.endret(lager.DATA)
     return templates.TemplateResponse(
         request, "_refresh_status.html", refresh_status_ctx()
     )
@@ -514,7 +360,7 @@ def _start_forslag_jobb() -> None:
     kuraterte lista (uavhengig av kurv-diffen), så tipsene ikke avhenger av
     hva som tilfeldigvis mangler akkurat nå."""
     liste = _liste(Valg(new_list=True))
-    forslag.start_bakgrunnsjobb(liste.rader, get_lines())
+    forslag.start_bakgrunnsjobb(liste.rader, lager.lines())
 
 
 def _forslag_ctx(auto_start: bool = False) -> dict:
@@ -606,7 +452,7 @@ async def handleliste_block(request: Request) -> HTMLResponse:
     name = str(form.get("name") or "")
     key = str(form.get("key") or "").strip()
     blocklist.block(pid, name=name)
-    invalidate_blocklist_caches()
+    lager.endret(lager.BLOKKERING)
     notice = {
         "kind": "product",
         "product_id": pid,
@@ -624,7 +470,7 @@ async def handleliste_unblock(request: Request) -> HTMLResponse:
     except ValueError:
         return HTMLResponse("Ugyldig product_id", status_code=400)
     blocklist.unblock(pid)
-    invalidate_blocklist_caches()
+    lager.endret(lager.BLOKKERING)
     return await _render_body_after_block_change(request)
 
 
@@ -638,7 +484,7 @@ async def handleliste_block_type(request: Request) -> HTMLResponse:
         return HTMLResponse("Mangler varetype", status_code=400)
     name = str(form.get("name") or "")
     blocklist.block_type(key, name=name)
-    invalidate_blocklist_caches()
+    lager.endret(lager.BLOKKERING)
     return await _render_body_after_block_change(
         request, {"kind": "type", "key": key, "name": name}
     )
@@ -651,7 +497,7 @@ async def handleliste_unblock_type(request: Request) -> HTMLResponse:
     if not key:
         return HTMLResponse("Mangler varetype", status_code=400)
     blocklist.unblock_type(key)
-    invalidate_blocklist_caches()
+    lager.endret(lager.BLOKKERING)
     return await _render_body_after_block_change(request)
 
 
@@ -744,7 +590,7 @@ async def handleliste_velg_representant(request: Request) -> HTMLResponse:
         price=float(price_raw) if price_raw else None,
         image=str(form.get("image") or ""),
     )
-    invalidate_representative_caches()
+    lager.endret(lager.REPRESENTANT)
     return await _render_body_after_block_change(request)
 
 
@@ -755,7 +601,7 @@ async def handleliste_fjern_representant(request: Request) -> HTMLResponse:
     if not key:
         return HTMLResponse("Mangler varetype", status_code=400)
     representatives.unchoose(key)
-    invalidate_representative_caches()
+    lager.endret(lager.REPRESENTANT)
     return await _render_body_after_block_change(request)
 
 
@@ -794,7 +640,7 @@ async def handleliste_variant_add(request: Request) -> HTMLResponse:
     if not key:
         return HTMLResponse("", status_code=400)
     active = _active_pids_from_form(form)
-    candidates = varianter_for(get_lines(), key)
+    candidates = varianter_for(lager.lines(), key)
     next_pid: int | None = next(
         (v["product_id"] for v in candidates if v["product_id"] not in active),
         None,
@@ -883,7 +729,7 @@ async def handleliste_add_to_cart(request: Request) -> HTMLResponse:
             f'<div class="alert error">Mangler innlogging på Oda: {e}</div>'
         )
 
-    cart_before = get_cart()
+    cart_before = lager.kurv()
     before: dict[int, int] = {}
     if not cart_before.empty:
         for _, r in cart_before.iterrows():
@@ -895,7 +741,7 @@ async def handleliste_add_to_cart(request: Request) -> HTMLResponse:
         return HTMLResponse(
             f'<div class="alert error">Kunne ikke legge i kurv: {err}</div>'
         )
-    invalidate_cart_cache()
+    lager.endret(lager.KURV)
 
     shortfalls: list[tuple[int, int, int]] = []
     actual_total = 0
@@ -921,7 +767,7 @@ async def handleliste_add_to_cart(request: Request) -> HTMLResponse:
             f'{cart_url}</div>'
         )
 
-    lines = get_lines()
+    lines = lager.lines()
     name_by_pid = (
         lines.drop_duplicates("product_id")
         .set_index("product_id")["product_name"]
@@ -953,7 +799,7 @@ def _innsikt_llm_ctx(auto_start: bool = False) -> dict:
         return {"innsikt_llm": None, "innsikt_llm_kjorer": False,
                 "innsikt_llm_feil": None}
     if auto_start and not innsikt_llm.er_i_gang() and not innsikt_llm.er_ferskt():
-        innsikt_llm.start_bakgrunnsjobb(get_lines())
+        innsikt_llm.start_bakgrunnsjobb(lager.lines())
     return {
         "innsikt_llm": innsikt_llm.load_innsikt(),
         "innsikt_llm_kjorer": innsikt_llm.er_i_gang(),
@@ -973,7 +819,7 @@ def innsikt_llm_status(request: Request) -> HTMLResponse:
 def innsikt_llm_regenerer(request: Request) -> HTMLResponse:
     """Tving en ny generering (Oppdater-knappen), uavhengig av cache-alder."""
     if llm.enabled() and not innsikt_llm.er_i_gang():
-        innsikt_llm.start_bakgrunnsjobb(get_lines())
+        innsikt_llm.start_bakgrunnsjobb(lager.lines())
     return templates.TemplateResponse(
         request, "_innsikt_llm.html", _innsikt_llm_ctx()
     )
@@ -981,8 +827,8 @@ def innsikt_llm_regenerer(request: Request) -> HTMLResponse:
 
 @app.get("/innsikt", response_class=HTMLResponse)
 def innsikt_page(request: Request, q: str = "") -> HTMLResponse:
-    orders, lines = get_orders_and_lines()
-    pairs, counts, name_map, n_orders = get_basket()
+    orders, lines = lager.orders_og_lines()
+    pairs, counts, name_map, n_orders = lager.basket_par()
     basket_lookup = (
         innsikt.basket_for_product(pairs, name_map, counts, n_orders, q)
         if q
@@ -1019,7 +865,7 @@ def innsikt_page(request: Request, q: str = "") -> HTMLResponse:
 
 @app.get("/innsikt/basket-lookup", response_class=HTMLResponse)
 def innsikt_basket_lookup(request: Request, q: str = "") -> HTMLResponse:
-    pairs, counts, name_map, n_orders = get_basket()
+    pairs, counts, name_map, n_orders = lager.basket_par()
     basket_lookup = (
         innsikt.basket_for_product(pairs, name_map, counts, n_orders, q)
         if q
