@@ -70,6 +70,17 @@ _TYPE_PRIORITY_OVERRIDE = {
     "morsmelkerstatning": "Småbarn 0-3",
 }
 
+def foreslatt_antall(median_days, avg_qty_per_event, list_cycle_days: int) -> int:
+    """Hvor mange enheter én syklus trenger: ceil(syklus x snitt-per-hendelse
+    / median-intervall), minst 1.
+
+    Ett sted, ett svar: både curate() og radene i handleliste.py bruker
+    denne. Formelen sto tidligere to steder og kunne drifte fra hverandre.
+    """
+    median = max(float(median_days), 1.0)
+    return max(1, math.ceil(list_cycle_days * float(avg_qty_per_event) / median))
+
+
 def curate(
     lines: pd.DataFrame,
     list_cycle_days: int = 7,
@@ -159,11 +170,8 @@ def curate(
     # Treårings-melk-kjøper med median=7 d og snitt 3 melk per ordre får
     # 6 melk på en 14-dagers liste, ikke 2.
     out["foreslått_antall"] = out.apply(
-        lambda r: max(
-            1,
-            math.ceil(
-                list_cycle_days * r["avg_qty_per_event"] / max(r["median_days"], 1)
-            ),
+        lambda r: foreslatt_antall(
+            r["median_days"], r["avg_qty_per_event"], list_cycle_days
         ),
         axis=1,
     )

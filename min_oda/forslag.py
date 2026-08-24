@@ -53,11 +53,11 @@ def er_ferskt(max_age_hours: float = FERSK_TIMER) -> bool:
     return alder.total_seconds() < max_age_hours * 3600
 
 
-def start_bakgrunnsjobb(rows: list[dict], lines, chat=None, search=None):
+def start_bakgrunnsjobb(rader, lines, chat=None, search=None):
     """Start generer() i en daemon-tråd (single-flight, jf. bakgrunnsjobb).
-    `rows`/`lines` beregnes av kalleren i request-konteksten; tråden rører
+    `rader`/`lines` beregnes av kalleren i request-konteksten; tråden rører
     ingen web-cacher."""
-    return _JOBB.start(lambda: generer(rows, lines, chat=chat, search=search))
+    return _JOBB.start(lambda: generer(rader, lines, chat=chat, search=search))
 
 
 def load_forslag() -> dict | None:
@@ -70,16 +70,16 @@ def load_forslag() -> dict | None:
         return None
 
 
-def _sparetips_kandidater(rows: list[dict], search) -> list[dict]:
+def _sparetips_kandidater(rader, search) -> list[dict]:
     """Katalogtreff som er billigere enn radens representant, per varetype.
     Søker på varetypens basenavn; identiske søk gjenbrukes på tvers av
     størrelses-suffikser (bleier-str5 og bleier-str6 søker begge «bleier»)."""
     sok_cache: dict[str, list[dict]] = {}
     kandidater: list[dict] = []
-    for r in rows:
-        if r.get("is_engangs") or r.get("unit_price") is None:
+    for r in rader:
+        if r.is_engangs or r.unit_price is None:
             continue
-        base = str(r["key"]).split("-", 1)[0]
+        base = str(r.key).split("-", 1)[0]
         if base not in sok_cache:
             try:
                 sok_cache[base] = search(base)
@@ -88,14 +88,14 @@ def _sparetips_kandidater(rows: list[dict], search) -> list[dict]:
         billigere = [
             t for t in sok_cache[base]
             if t["price"] is not None
-            and t["price"] < float(r["unit_price"])
-            and t["product_id"] != r["product_id"]
+            and t["price"] < float(r.unit_price)
+            and t["product_id"] != r.product_id
         ][:_MAX_KANDIDATER_PER_TYPE]
         if billigere:
             kandidater.append({
-                "key": str(r["key"]),
-                "fra_navn": str(r["product_name"]),
-                "fra_pris": float(r["unit_price"]),
+                "key": str(r.key),
+                "fra_navn": str(r.product_name),
+                "fra_pris": float(r.unit_price),
                 "treff": billigere,
             })
         if len(kandidater) >= _MAX_SPARETIPS_RADER:
@@ -103,9 +103,9 @@ def _sparetips_kandidater(rows: list[dict], search) -> list[dict]:
     return kandidater
 
 
-def _sparetips(rows: list[dict], chat, search) -> list[dict] | None:
+def _sparetips(rader, chat, search) -> list[dict] | None:
     """None = LLM-svikt (uparsebart/ingen svar), [] = genuint ingen tips."""
-    kandidater = _sparetips_kandidater(rows, search)
+    kandidater = _sparetips_kandidater(rader, search)
     if not kandidater:
         return []
     listing = "\n".join(
@@ -275,7 +275,7 @@ def _nye(lines: pd.DataFrame, chat, search) -> tuple[list[str], list[dict]] | No
     return profil, out
 
 
-def generer(rows: list[dict], lines: pd.DataFrame,
+def generer(rader, lines: pd.DataFrame,
             chat=None, search=None) -> dict:
     """Generer og lagre forslag. `chat`/`search` kan injiseres i tester.
     Ved LLM-svikt returneres et feil-dict uten å røre forrige cache."""
@@ -284,7 +284,7 @@ def generer(rows: list[dict], lines: pd.DataFrame,
     if not llm.enabled() and chat is llm.chat:
         return {"feil": "Ingen LLM-provider tilgjengelig (jf. LLM_PROVIDER i .env)."}
 
-    sparetips = _sparetips(rows, chat, search)
+    sparetips = _sparetips(rader, chat, search)
     nye_resultat = _nye(lines, chat, search)
     if sparetips is None and nye_resultat is None:
         return {"feil": "Fikk ikke brukbart svar fra språkmodellen. Prøv igjen."}

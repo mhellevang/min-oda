@@ -9,17 +9,18 @@ import pandas as pd
 import pytest
 
 from min_oda import forslag
+from min_oda.handleliste import Rad
 
 
 @pytest.fixture
 def rows():
     return [
-        {"key": "melk", "product_id": 100, "product_name": "Tine Lettmelk 1,75 l",
-         "unit_price": 30.0},
-        {"key": "brød", "product_id": 200, "product_name": "Solsikkebrød 620 g",
-         "unit_price": 45.0},
-        {"key": "engangs", "product_id": 300, "product_name": "Party-lys",
-         "unit_price": 20.0, "is_engangs": True},
+        Rad(key="melk", product_id=100, product_name="Tine Lettmelk 1,75 l",
+            unit_price=30.0),
+        Rad(key="brød", product_id=200, product_name="Solsikkebrød 620 g",
+            unit_price=45.0),
+        Rad(key="engangs", product_id=300, product_name="Party-lys",
+            unit_price=20.0, is_engangs=True),
     ]
 
 

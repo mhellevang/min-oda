@@ -22,6 +22,10 @@ Et produkt fra Odas søke-API som ikke finnes i egen kjøpshistorikk. Har ingen 
 En katalogvare som legges rett i Oda-kurven uten å påvirke varetyper, representanter eller kadens.
 _Avoid_: impulskjøp
 
+**Handleliste**:
+Rader for det som bør handles nå: én rad per varetype med kadens, pluss engangsvarene. Bygges av `handleliste.bygg()` — kuratering, kurv-diff, priser og varianter i ett kall.
+_Avoid_: forslagsliste
+
 **Kadens**:
 Median antall dager mellom kjøp innen en varetype. Grunnlaget for forfalt/snart/i rute-status og foreslått antall.
 

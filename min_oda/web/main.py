@@ -25,14 +25,25 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-import math
-
 from . import auth
 from .. import blocklist, engangsvarer, forslag, innsikt_llm, llm, representatives
 from ..build_list import curate
-from ..cart_diff import compute_diff, fetch_cart
+from ..cart_diff import fetch_cart
 from ..data_loader import load_both
 from ..fetch_orders import maybe_refresh_data
+from ..handleliste import (
+    DEFAULT_CYCLE,
+    DEFAULT_MAX_PER_CAT,
+    DEFAULT_TOP,
+    EMPTY_CART,
+    Kilder,
+    Liste,
+    Valg,
+    bygg,
+    kort_dato,
+    variant_rad,
+    varianter_for,
+)
 from ..images import latest_product_images
 from ..prices import latest_unit_prices
 from ..oda_client import (
@@ -44,7 +55,6 @@ from ..oda_client import (
     search_products,
 )
 from ..restock import compute_cadence
-from ..variants import variants_for_type
 
 from . import innsikt
 
@@ -151,7 +161,7 @@ def _register_template_globals() -> None:
     templates.env.filters["format_days_ago"] = format_days_ago
     templates.env.filters["format_kr"] = format_kr
     templates.env.filters["format_int"] = format_int
-    templates.env.filters["format_dato"] = _no_short_date
+    templates.env.filters["format_dato"] = kort_dato
 
 
 # Registrert i bunnen av modulen, etter at refresh_status_ctx er definert.
@@ -163,36 +173,17 @@ _CART: pd.DataFrame | None = None
 _CART_TIME = 0.0
 _CART_TTL = 120.0
 
-DEFAULT_CYCLE = 7
-DEFAULT_TOP = 40
-DEFAULT_MAX_PER_CAT = 8
 
 _BASELINE_IDS: set[int] | None = None
 _CADENCE_BY_TYPE: pd.DataFrame | None = None
 _PRICE_MAP: dict[int, float] | None = None
 _IMAGE_MAP: dict[int, str] | None = None
-_VARIANT_LIMIT = 10
 
 _REFRESH_STATUS: dict = {
     "refreshed": False,
     "data_age_hours": None,
     "error": None,
 }
-
-_NB_MONTHS_SHORT = ["", "jan", "feb", "mar", "apr", "mai", "jun",
-                    "jul", "aug", "sep", "okt", "nov", "des"]
-
-
-def _no_short_date(ts) -> str:
-    """Norsk kort datoform: '14. mai' i år, '14. mai 2025' ellers."""
-    if ts is None or pd.isna(ts):
-        return "—"
-    d = pd.Timestamp(ts)
-    today = pd.Timestamp.now()
-    if d.year == today.year:
-        return f"{d.day}. {_NB_MONTHS_SHORT[d.month]}"
-    return f"{d.day}. {_NB_MONTHS_SHORT[d.month]} {d.year}"
-
 
 def format_age(hours: float | None) -> str:
     """Jinja-filter: alder i timer → 'X min siden' / 'X t siden' / …"""
@@ -284,11 +275,6 @@ def get_lines() -> pd.DataFrame:
     return _load_data()[1]
 
 
-_EMPTY_CART = pd.DataFrame(
-    columns=["product_id", "product_name", "category", "quantity", "varetype"]
-)
-
-
 def get_cart() -> pd.DataFrame:
     """Hent handlekurv fra Oda. Hvis cookies mangler, returner tom kurv så
     siden fortsatt rendrer. Auth-banneret over forteller brukeren hva som
@@ -298,7 +284,7 @@ def get_cart() -> pd.DataFrame:
         try:
             _CART = fetch_cart(build_client())
         except MissingCredentials:
-            _CART = _EMPTY_CART
+            _CART = EMPTY_CART
         _CART_TIME = time()
     return _CART
 
@@ -379,22 +365,20 @@ def invalidate_representative_caches() -> None:
     _CADENCE_BY_TYPE = None
 
 
-def _mode_urls(
-    cycle: int, top: int, max_per_cat: int, search: str, top_up: bool
-) -> tuple[str, str]:
+def _mode_urls(valg: Valg) -> tuple[str, str]:
     """Bygg URL-er for modus-bytte som preserverer ikke-default filtre."""
     base: dict[str, str | int] = {}
-    if cycle != DEFAULT_CYCLE:
-        base["cycle"] = cycle
-    if top != DEFAULT_TOP:
-        base["top"] = top
-    if max_per_cat != DEFAULT_MAX_PER_CAT:
-        base["max_per_cat"] = max_per_cat
-    if search:
-        base["search"] = search
+    if valg.cycle != DEFAULT_CYCLE:
+        base["cycle"] = valg.cycle
+    if valg.top != DEFAULT_TOP:
+        base["top"] = valg.top
+    if valg.max_per_cat != DEFAULT_MAX_PER_CAT:
+        base["max_per_cat"] = valg.max_per_cat
+    if valg.search:
+        base["search"] = valg.search
 
     diff_params = dict(base)
-    if top_up:
+    if valg.top_up:
         diff_params["top_up"] = "true"
     new_list_params = dict(base, new_list="true")
 
@@ -405,230 +389,22 @@ def _mode_urls(
     return url_diff, url_new_list
 
 
-def _foreslag_for(cadence_row: pd.Series, cycle: int) -> int:
-    """Samme formel som curate: ceil(cycle × snitt-per-event / median)."""
-    median = max(float(cadence_row["median_days"]), 1.0)
-    return max(1, math.ceil(cycle * float(cadence_row["avg_qty_per_event"]) / median))
-
-
-def _cart_qty_for(cart: pd.DataFrame, key: str) -> int:
-    """Sum antall i kurven for varetypen (0 hvis ingen variant er der).
-    Teller per varetype, ikke per produkt-id — samme semantikk som
-    compute_diff, så en substituerende variant (buksebleier for bleier)
-    regnes som dekning."""
-    if cart.empty:
-        return 0
-    sub = cart[cart["varetype"] == key]
-    if sub.empty:
-        return 0
-    return int(sub["quantity"].sum())
-
-
-def _variants_for_row(lines: pd.DataFrame, key: str) -> list[dict]:
-    """Topp varianter for en varetype, formatert for templaten."""
-    df = variants_for_type(lines, key, limit=_VARIANT_LIMIT,
-                           blocked=blocklist.blocked_ids())
-    if df.empty:
-        return []
-    return [
-        {"product_id": int(r["product_id"]), "product_name": str(r["product_name"])}
-        for _, r in df.iterrows()
-    ]
-
-
-def _build_row_dict(
-    cadence_row: pd.Series,
-    pid: int,
-    product_name: str,
-    category: str,
-    cycle: int,
-    new_list: bool,
-    cart: pd.DataFrame | None,
-    baseline_ids: set[int],
-    variants: list[dict],
-    price_map: dict[int, float] | None = None,
-    image_map: dict[int, str] | None = None,
-    is_added_variant: bool = False,
-    is_chosen: bool = False,
-) -> dict:
-    """Bygg rad-dict klar for `_list_row.html`, gitt en cadence-rad
-    (typenivå) og en konkret pid + navn. Brukes både av hovedtabellen og
-    av variant-swap/add-endepunktene.
-
-    `is_added_variant=True` markerer rader som brukeren har lagt til via
-    +-knappen — disse får −-knapp i UI for symmetrisk fjerning, og
-    flagget bevares gjennom dropdown-swap."""
-    forslag = _foreslag_for(cadence_row, cycle)
-    if new_list:
-        i_kurv = None
-        mangler = None
-        default_qty = forslag
-    else:
-        i_kurv = _cart_qty_for(
-            cart if cart is not None else _EMPTY_CART, str(cadence_row["key"])
-        )
-        mangler = max(0, forslag - i_kurv)
-        default_qty = mangler
-    unit_price = (price_map or {}).get(pid)
-    line_cost = unit_price * default_qty if unit_price is not None else None
-    return {
-        "product_id": pid,
-        "image": (image_map or {}).get(pid),
-        "unit_price": unit_price,
-        "line_cost": line_cost,
-        "category": category,
-        "key": str(cadence_row["key"]),
-        "product_name": product_name,
-        "forslag": forslag,
-        "i_kurv": i_kurv,
-        "mangler": mangler,
-        "qty": default_qty,
-        "days_since": int(cadence_row["days_since"]) if pd.notna(cadence_row.get("days_since")) else None,
-        "last_label": _no_short_date(cadence_row["last"]),
-        "is_extra": pid not in baseline_ids,
-        "is_added_variant": is_added_variant,
-        "is_chosen": is_chosen,
-        "variants": variants,
-    }
-
-
-def _engangs_rows(
-    search: str, new_list: bool, cart: pd.DataFrame | None,
-    price_map: dict[int, float],
-) -> list[dict]:
-    """Rader for engangsvarer fra katalogsøket (jf. engangsvarer.py).
-    Ingen kadens — antallet er det brukeren har lagt inn lokalt. Sist
-    betalt pris vinner over søketreff-snapshotet, som for representanter."""
-    rows: list[dict] = []
-    for item in engangsvarer.list_items():
-        if search and search.lower() not in item["name"].lower():
-            continue
-        pid = item["product_id"]
-        qty = item["qty"]
-        if new_list:
-            i_kurv = None
-            mangler = None
-            default_qty = qty
-        else:
-            c = cart if cart is not None else _EMPTY_CART
-            sub = c[c["product_id"].astype(int) == pid] if not c.empty else c
-            i_kurv = 0 if sub.empty else int(sub["quantity"].sum())
-            mangler = max(0, qty - i_kurv)
-            default_qty = mangler
-        price = price_map.get(pid, item["price"])
-        unit_price = float(price) if price is not None else None
-        rows.append({
-            "product_id": pid,
-            "image": item["image"] or None,
-            "unit_price": unit_price,
-            "line_cost": unit_price * default_qty if unit_price is not None else None,
-            "category": "",
-            "key": "engangs",
-            "product_name": item["name"],
-            "forslag": qty,
-            "i_kurv": i_kurv,
-            "mangler": mangler,
-            "qty": default_qty,
-            "days_since": None,
-            "last_label": "",
-            "is_extra": False,
-            "is_added_variant": False,
-            "is_chosen": False,
-            "is_engangs": True,
-            "variants": [],
-        })
-    return rows
-
-
-def _build_rows(
-    lines: pd.DataFrame,
-    cycle: int,
-    top: int,
-    max_per_cat: int,
-    search: str,
-    new_list: bool,
-    top_up: bool,
-) -> tuple[list[dict], int, int]:
-    chosen = representatives.chosen_representatives()
-    ideal = curate(
-        lines, list_cycle_days=cycle, top_n=top, max_per_category=max_per_cat,
-        blocked=blocklist.blocked_ids(),
-        blocked_types=blocklist.blocked_types(),
-        chosen=chosen,
+def _kilder() -> Kilder:
+    """De cachede oppslagene rad-byggingen trenger."""
+    return Kilder(
+        priser=get_price_map(),
+        bilder=get_image_map(),
+        baseline_ids=get_baseline_ids(),
     )
-    if ideal.empty:
-        # Engangsvarer skal vises selv uten kadens-kandidater.
-        cart = get_cart() if not new_list else None
-        cart_total = int(cart["quantity"].sum()) if cart is not None and not cart.empty else 0
-        return _engangs_rows(search, new_list, cart, get_price_map()), cart_total, 0
-
-    baseline_ids = get_baseline_ids()
-    price_map = get_price_map()
-    image_map = get_image_map()
-    if chosen:
-        # Katalogvarer finnes ikke i historikken — bruk snapshotet fra
-        # søketreffet. setdefault: en ekte sist-betalt-pris vinner.
-        price_map = dict(price_map)
-        image_map = dict(image_map)
-        for c in chosen.values():
-            pid = int(c["product_id"])
-            if c.get("price") is not None:
-                price_map.setdefault(pid, float(c["price"]))
-            if c.get("image"):
-                image_map.setdefault(pid, str(c["image"]))
-
-    cart_total = 0
-    cart: pd.DataFrame | None = None
-    if not new_list:
-        cart = get_cart()
-        cart_total = int(cart["quantity"].sum()) if not cart.empty else 0
-        ideal = compute_diff(ideal, cart, top_up=top_up)
-
-    if search and not ideal.empty:
-        s = search.lower()
-        mask = (
-            ideal["key"].astype(str).str.lower().str.contains(s, na=False)
-            | ideal["product_name"].astype(str).str.lower().str.contains(s, na=False)
-            | ideal["category"].astype(str).str.lower().str.contains(s, na=False)
-        )
-        ideal = ideal[mask].reset_index(drop=True)
-
-    rows: list[dict] = []
-    extra_count = 0
-    for _, r in ideal.iterrows():
-        pid = int(r["product_id"])
-        key = str(r["key"])
-        is_chosen = (
-            key in chosen and int(chosen[key]["product_id"]) == pid
-        )
-        # Valgt representant: ingen variant-dropdown — katalogvaren
-        # finnes ikke blant de historiske variantene.
-        variants = [] if is_chosen else _variants_for_row(lines, key)
-        row = _build_row_dict(
-            cadence_row=r,
-            pid=pid,
-            product_name=str(r["product_name"]),
-            category=str(r["category"]),
-            cycle=cycle,
-            new_list=new_list,
-            cart=cart,
-            baseline_ids=baseline_ids,
-            variants=variants,
-            price_map=price_map,
-            image_map=image_map,
-            is_chosen=is_chosen,
-        )
-        if row["is_extra"]:
-            extra_count += 1
-        rows.append(row)
-    rows.extend(_engangs_rows(search, new_list, cart, price_map))
-    return rows, cart_total, extra_count
 
 
-def _list_total(rows: list[dict]) -> float:
-    """Sum av radsummene (avrundet per rad, som JS-en) — ca.-total for lista."""
-    return float(
-        sum(round(r["line_cost"]) for r in rows if r.get("unit_price") is not None)
+def _liste(valg: Valg) -> Liste:
+    """Handlelista for valgte filtre (jf. handleliste.bygg)."""
+    return bygg(
+        get_lines(),
+        valg,
+        kurv=None if valg.new_list else get_cart(),
+        kilder=_kilder(),
     )
 
 
@@ -648,55 +424,26 @@ def _active_pids_from_form(form) -> set[int]:
 
 
 def _render_variant_row(
-    request: Request,
-    key: str,
-    pid: int,
-    cycle: int,
-    new_list: bool,
-    is_added_variant: bool,
+    request: Request, key: str, pid: int, valg: Valg, is_added_variant: bool
 ) -> HTMLResponse:
-    """Bygg + rendre én _list_row.html for (varetype, pid)-kombinasjonen.
-    Returnerer tom HTML hvis vi ikke finner kadens for typen eller pid-en."""
-    lines = get_lines()
-    cadence = get_cadence_by_type()
-    sub = cadence[cadence["key"] == key]
-    if sub.empty:
-        return HTMLResponse("")
-    cadence_row = sub.iloc[0]
-
-    variants = _variants_for_row(lines, key)
-    # Finn navn + kategori for pid-en. Variant-listen er kuttet til
-    # topp 10, så gå tilbake til lines som fallback.
-    match = next((v for v in variants if v["product_id"] == pid), None)
-    if match:
-        product_name = match["product_name"]
-        cat_row = lines[lines["product_id"].astype(int) == pid].head(1)
-    else:
-        cat_row = lines[lines["product_id"].astype(int) == pid].head(1)
-        if cat_row.empty:
-            return HTMLResponse("")
-        product_name = str(cat_row["product_name"].iloc[0])
-    category = str(cat_row["category"].iloc[0]) if not cat_row.empty else ""
-
-    cart = get_cart() if not new_list else None
-    row = _build_row_dict(
-        cadence_row=cadence_row,
-        pid=pid,
-        product_name=product_name,
-        category=category,
-        cycle=cycle,
-        new_list=new_list,
-        cart=cart,
-        baseline_ids=get_baseline_ids(),
-        variants=variants,
-        price_map=get_price_map(),
-        image_map=get_image_map(),
+    """Rendre én _list_row.html for (varetype, pid). Tom HTML hvis vi ikke
+    finner kadens for typen eller pid-en."""
+    rad = variant_rad(
+        get_lines(),
+        get_cadence_by_type(),
+        key,
+        pid,
+        valg,
+        kurv=None if valg.new_list else get_cart(),
+        kilder=_kilder(),
         is_added_variant=is_added_variant,
     )
+    if rad is None:
+        return HTMLResponse("")
     return templates.TemplateResponse(
         request,
         "_list_row.html",
-        {"r": row, "cycle": cycle, "new_list": new_list},
+        {"r": rad, "cycle": valg.cycle, "new_list": valg.new_list},
     )
 
 
@@ -728,10 +475,10 @@ def handleliste(
     new_list: bool = False,
     top_up: bool = False,
 ) -> HTMLResponse:
-    rows, cart_total, extra_count = _build_rows(
-        get_lines(), cycle, top, max_per_cat, search, new_list, top_up
-    )
-    url_diff, url_new_list = _mode_urls(cycle, top, max_per_cat, search, top_up)
+    valg = Valg(cycle=cycle, top=top, max_per_cat=max_per_cat,
+                search=search, new_list=new_list, top_up=top_up)
+    liste = _liste(valg)
+    url_diff, url_new_list = _mode_urls(valg)
     return templates.TemplateResponse(
         request,
         "handleliste.html",
@@ -743,10 +490,10 @@ def handleliste(
             "search": search,
             "new_list": new_list,
             "top_up": top_up,
-            "rows": rows,
-            "cart_total": cart_total,
-            "extra_count": extra_count,
-            "list_total": _list_total(rows),
+            "rows": liste.rader,
+            "cart_total": liste.kurv_antall,
+            "extra_count": liste.ekstra_antall,
+            "list_total": liste.total,
             "url_diff": url_diff,
             "url_new_list": url_new_list,
             "blocked_items": blocklist.list_blocked(),
@@ -760,11 +507,8 @@ def _start_forslag_jobb() -> None:
     """Start bakgrunnsgenerering av LLM-forslag. Grunnlaget er den fulle
     kuraterte lista (uavhengig av kurv-diffen), så tipsene ikke avhenger av
     hva som tilfeldigvis mangler akkurat nå."""
-    rows, _, _ = _build_rows(
-        get_lines(), DEFAULT_CYCLE, DEFAULT_TOP, DEFAULT_MAX_PER_CAT,
-        search="", new_list=True, top_up=False,
-    )
-    forslag.start_bakgrunnsjobb(rows, get_lines())
+    liste = _liste(Valg(new_list=True))
+    forslag.start_bakgrunnsjobb(liste.rader, get_lines())
 
 
 def _forslag_ctx(auto_start: bool = False) -> dict:
@@ -811,13 +555,13 @@ def handleliste_table(
     new_list: bool = False,
     top_up: bool = False,
 ) -> HTMLResponse:
-    rows, _, extra_count = _build_rows(
-        get_lines(), cycle, top, max_per_cat, search, new_list, top_up
-    )
+    liste = _liste(Valg(cycle=cycle, top=top, max_per_cat=max_per_cat,
+                        search=search, new_list=new_list, top_up=top_up))
     return templates.TemplateResponse(
         request, "_list_table.html",
-        {"rows": rows, "new_list": new_list, "extra_count": extra_count,
-         "cycle": cycle, "list_total": _list_total(rows)},
+        {"rows": liste.rader, "new_list": new_list,
+         "extra_count": liste.ekstra_antall, "cycle": cycle,
+         "list_total": liste.total},
     )
 
 
@@ -828,37 +572,17 @@ async def _render_body_after_block_change(
     Henter filtrene fra form-data (inkludert via hx-include) slik at
     visningen beholder cycle/top/search/etc. `notice` rendres som en
     angre-linje over tabellen (etter × og «skjul hele varetypen»)."""
-    form = await request.form()
-
-    def _int(name: str, default: int) -> int:
-        try:
-            return int(form.get(name) or default)
-        except (TypeError, ValueError):
-            return default
-
-    def _bool(name: str) -> bool:
-        val = form.get(name)
-        return str(val).lower() in {"true", "on", "1"}
-
-    cycle = _int("cycle", DEFAULT_CYCLE)
-    rows, _, extra_count = _build_rows(
-        get_lines(),
-        cycle=cycle,
-        top=_int("top", DEFAULT_TOP),
-        max_per_cat=_int("max_per_cat", DEFAULT_MAX_PER_CAT),
-        search=str(form.get("search") or ""),
-        new_list=_bool("new_list"),
-        top_up=_bool("top_up"),
-    )
+    valg = Valg.fra_form(await request.form())
+    liste = _liste(valg)
     return templates.TemplateResponse(
         request,
         "_handleliste_body.html",
         {
-            "rows": rows,
-            "extra_count": extra_count,
-            "new_list": _bool("new_list"),
-            "cycle": cycle,
-            "list_total": _list_total(rows),
+            "rows": liste.rader,
+            "extra_count": liste.ekstra_antall,
+            "new_list": valg.new_list,
+            "cycle": valg.cycle,
+            "list_total": liste.total,
             "blocked_items": blocklist.list_blocked(),
             "blocked_types": blocklist.list_blocked_types(),
             "notice": notice,
@@ -1043,14 +767,14 @@ async def handleliste_variant_swap(request: Request) -> HTMLResponse:
     old_pid = str(form.get("pid") or "")
     if not key or not old_pid:
         return HTMLResponse("", status_code=400)
-    cycle = int(form.get("cycle") or DEFAULT_CYCLE)
-    new_list = str(form.get("new_list") or "").lower() == "true"
     is_added_variant = str(form.get("is_added_variant") or "").lower() == "true"
     try:
         new_pid = int(str(form.get(f"product_select_{old_pid}") or ""))
     except ValueError:
         return HTMLResponse("", status_code=400)
-    return _render_variant_row(request, key, new_pid, cycle, new_list, is_added_variant)
+    return _render_variant_row(
+        request, key, new_pid, Valg.fra_form(form), is_added_variant
+    )
 
 
 @app.post("/handleliste/variant-add", response_class=HTMLResponse)
@@ -1063,11 +787,8 @@ async def handleliste_variant_add(request: Request) -> HTMLResponse:
     key = str(form.get("key") or "")
     if not key:
         return HTMLResponse("", status_code=400)
-    cycle = int(form.get("cycle") or DEFAULT_CYCLE)
-    new_list = str(form.get("new_list") or "").lower() == "true"
-
     active = _active_pids_from_form(form)
-    candidates = _variants_for_row(get_lines(), key)
+    candidates = varianter_for(get_lines(), key)
     next_pid: int | None = next(
         (v["product_id"] for v in candidates if v["product_id"] not in active),
         None,
@@ -1078,7 +799,9 @@ async def handleliste_variant_add(request: Request) -> HTMLResponse:
             'padding:6px 10px;">Ingen flere varianter å legge til av denne'
             ' varetypen.</td></tr>'
         )
-    return _render_variant_row(request, key, next_pid, cycle, new_list, is_added_variant=True)
+    return _render_variant_row(
+        request, key, next_pid, Valg.fra_form(form), is_added_variant=True
+    )
 
 
 def _parse_qty_items(form) -> list[tuple[int, int]]:
