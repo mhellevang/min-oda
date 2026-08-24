@@ -171,7 +171,7 @@ def _kjopsprofil(lines: pd.DataFrame) -> str:
     preferanser (karbonadedeig framfor kjøttdeig, grovt framfor fint), og
     innsikt-signalene oppsummerer kjøkken, kokestil, pris og helse."""
     from .product_types import annotate
-    from .web import innsikt
+    from . import innsikt
 
     df = lines.dropna(subset=["product_id", "product_name"]).copy()
     df = annotate(df).dropna(subset=["varetype"])

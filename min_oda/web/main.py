@@ -26,7 +26,15 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import auth
-from .. import blocklist, engangsvarer, forslag, innsikt_llm, llm, representatives
+from .. import (
+    blocklist,
+    engangsvarer,
+    forslag,
+    innsikt,
+    innsikt_llm,
+    llm,
+    representatives,
+)
 from ..build_list import curate
 from ..cart_diff import fetch_cart
 from ..data_loader import load_both
@@ -55,8 +63,6 @@ from ..oda_client import (
     search_products,
 )
 from ..restock import compute_cadence
-
-from . import innsikt
 
 log = logging.getLogger("min-oda")
 
