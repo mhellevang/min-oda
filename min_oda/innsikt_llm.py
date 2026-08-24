@@ -232,19 +232,18 @@ def _siden_sist(df: pd.DataFrame, chat, today: pd.Timestamp) -> str | None:
 
 def generer(lines: pd.DataFrame, chat=None,
             today: pd.Timestamp | None = None) -> dict:
-    """Generer og lagre innsikt. `chat`/`today` kan injiseres i tester.
+    """Generer og lagre innsikt. `chat`/`today` kan injiseres i tester
+    (`today` må være tz-bevisst UTC, jf. data_loader.load_lines).
     Ved LLM-svikt returneres et feil-dict uten å røre forrige cache."""
     chat = chat or llm.chat
     if not llm.enabled() and chat is llm.chat:
         return {"feil": "Ingen LLM-provider tilgjengelig (jf. LLM_PROVIDER i .env)."}
-    today = pd.Timestamp(today) if today is not None else pd.Timestamp.now()
+    # `today` er tz-bevisst UTC, samme konvensjon som load_lines og
+    # restock.compute_cadence. Ett tidsregime i hele analysekjeden.
+    today = pd.Timestamp(today) if today is not None else pd.Timestamp.now(tz="UTC")
 
     df = annotate(lines)
-    # Ordre-datoene fra Oda er tz-bevisste (UTC); sammenligninger mot naive
-    # Timestamp-er (today, testenes TODAY) krever naive datoer.
-    df["date"] = pd.to_datetime(df["date"])
-    if df["date"].dt.tz is not None:
-        df["date"] = df["date"].dt.tz_localize(None)
+    df["date"] = pd.to_datetime(df["date"], utc=True)
     monstre = _monstre(df, chat)
     siden = _siden_sist(df, chat, today.normalize())
     if monstre is None and siden is None:

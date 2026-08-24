@@ -9,7 +9,7 @@ import pytest
 from min_oda import innsikt_llm
 from min_oda.product_types import annotate
 
-TODAY = pd.Timestamp("2026-05-14")
+TODAY = pd.Timestamp("2026-05-14", tz="UTC")
 
 
 @pytest.fixture
