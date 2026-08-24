@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from min_oda import innsikt_llm
-from min_oda.product_types import annotate_lines
+from min_oda.product_types import annotate
 
 TODAY = pd.Timestamp("2026-05-14")
 
@@ -40,7 +40,7 @@ def lines():
 
 
 def test_monstre_verifiseres_mot_ordrene(lines):
-    df = annotate_lines(lines)
+    df = annotate(lines)
     svar = json.dumps([
         {"navn": "Taco-kveld",
          "varetyper": ["tortilla-lompe", "kjøttdeig", "taco", "mais"],
@@ -59,7 +59,7 @@ def test_monstre_verifiseres_mot_ordrene(lines):
 
 
 def test_monstre_stifter_filtreres_fra_prompten(lines):
-    df = annotate_lines(lines)
+    df = annotate(lines)
     prompts = []
 
     def chat(s, u, max_tokens):
@@ -73,7 +73,7 @@ def test_monstre_stifter_filtreres_fra_prompten(lines):
 
 
 def test_monstre_llm_svikt_gir_none(lines):
-    df = annotate_lines(lines)
+    df = annotate(lines)
     assert innsikt_llm._monstre(df, lambda s, u, max_tokens: None) is None
 
 
@@ -93,7 +93,7 @@ def test_fakta_siden_sist():
             "product_id": 2, "product_name": "Korn Solsikkebrød",
             "category": "Bakeri og konditori", "quantity": 1, "line_total": 45.0,
         })
-    df = annotate_lines(pd.DataFrame(rows))
+    df = annotate(pd.DataFrame(rows))
     fakta = innsikt_llm._fakta_siden_sist(df, TODAY)
     assert any("Ny gjenganger" in f and "Skyr" in f for f in fakta)
     assert any("Stift på vei ut" in f and "Solsikkebrød" in f for f in fakta)

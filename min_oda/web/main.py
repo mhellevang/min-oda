@@ -285,7 +285,7 @@ def get_lines() -> pd.DataFrame:
 
 
 _EMPTY_CART = pd.DataFrame(
-    columns=["product_id", "product_name", "category", "quantity", "_type"]
+    columns=["product_id", "product_name", "category", "quantity", "varetype"]
 )
 
 
@@ -418,7 +418,7 @@ def _cart_qty_for(cart: pd.DataFrame, key: str) -> int:
     regnes som dekning."""
     if cart.empty:
         return 0
-    sub = cart[cart["_type"] == key]
+    sub = cart[cart["varetype"] == key]
     if sub.empty:
         return 0
     return int(sub["quantity"].sum())

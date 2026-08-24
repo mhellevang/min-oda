@@ -24,7 +24,7 @@ from .blocklist import blocked_ids
 from .build_list import curate
 from .data_loader import load_both
 from .oda_client import LIST_URL, add_products, build_client, create_list
-from .product_types import product_type
+from .product_types import annotate
 
 console = Console()
 
@@ -49,14 +49,9 @@ def fetch_cart(client) -> pd.DataFrame:
             })
     if not rows:
         return pd.DataFrame(
-            columns=["product_id", "product_name", "category", "quantity", "_type"]
+            columns=["product_id", "product_name", "category", "quantity", "varetype"]
         )
-    df = pd.DataFrame(rows)
-    df["_type"] = df.apply(
-        lambda r: product_type(r["product_name"], r["category"], r["product_id"]),
-        axis=1,
-    )
-    return df
+    return annotate(pd.DataFrame(rows))
 
 
 def compute_diff(ideal: pd.DataFrame, cart: pd.DataFrame, top_up: bool) -> pd.DataFrame:
@@ -68,7 +63,9 @@ def compute_diff(ideal: pd.DataFrame, cart: pd.DataFrame, top_up: bool) -> pd.Da
     if cart.empty:
         cart_qty: pd.Series = pd.Series(dtype=int)
     else:
-        cart_qty = cart.dropna(subset=["_type"]).groupby("_type")["quantity"].sum()
+        cart_qty = (
+            cart.dropna(subset=["varetype"]).groupby("varetype")["quantity"].sum()
+        )
 
     out = ideal.copy()
     out["i_kurv"] = out["key"].map(cart_qty).fillna(0).astype(int)

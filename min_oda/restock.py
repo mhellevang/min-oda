@@ -26,11 +26,12 @@ from rich.console import Console
 from rich.table import Table
 
 from .data_loader import load_both
-from .product_types import product_type
+from .product_types import annotate
 
 console = Console()
 
-# Hopp over forbruksvarer som vokses ut av — samme regel som build_list.py.
+# Hopp over forbruksvarer som vokses ut av. Samme mønster som
+# product_types._SIZE_PATTERNS, som splitter størrelser i egne varetyper.
 SIZE_CODED_RE = re.compile(
     r"\bstr\.?\s*\d|\d+\s*-\s*\d+\s*kg|\b\d+\s*mnd\b|\btrinn\s*\d",
     re.IGNORECASE,
@@ -82,12 +83,8 @@ def compute_cadence(
         df = df[df["date"].dt.year >= since]
 
     if by_type:
-        df["_type"] = df.apply(
-            lambda r: product_type(r["product_name"], r.get("category"), r["product_id"]),
-            axis=1,
-        )
-        df = df.dropna(subset=["_type"])
-        group_key = "_type"
+        df = annotate(df).dropna(subset=["varetype"])
+        group_key = "varetype"
     else:
         group_key = "product_id"
 

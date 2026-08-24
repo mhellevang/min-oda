@@ -17,9 +17,9 @@ def _ideal(items: list[tuple[str, int]]) -> pd.DataFrame:
 def _cart(items: list[tuple[str, int]]) -> pd.DataFrame:
     """Kurv på minimal form: (_type, quantity)."""
     if not items:
-        return pd.DataFrame(columns=["_type", "quantity"])
+        return pd.DataFrame(columns=["varetype", "quantity"])
     return pd.DataFrame(
-        [{"_type": t, "quantity": q} for t, q in items]
+        [{"varetype": t, "quantity": q} for t, q in items]
     )
 
 
@@ -69,8 +69,8 @@ def test_cart_with_unknown_type_ignored():
     """Kurv-rader uten _type (ukjent varetype) skal ikke krasje."""
     ideal = _ideal([("melk", 2)])
     cart = pd.DataFrame([
-        {"_type": "melk", "quantity": 1},
-        {"_type": None, "quantity": 5},
+        {"varetype": "melk", "quantity": 1},
+        {"varetype": None, "quantity": 5},
     ])
     out = compute_diff(ideal, cart, top_up=True)
     assert int(out["i_kurv"].iloc[0]) == 1

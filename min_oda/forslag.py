@@ -170,32 +170,25 @@ def _kjopsprofil(lines: pd.DataFrame) -> str:
     volum: variant-fordelingen innen hver varetype avslører bevisste
     preferanser (karbonadedeig framfor kjøttdeig, grovt framfor fint), og
     innsikt-signalene oppsummerer kjøkken, kokestil, pris og helse."""
-    from .product_types import product_type
+    from .product_types import annotate
     from .web import innsikt
 
     df = lines.dropna(subset=["product_id", "product_name"]).copy()
-    typer = {
-        int(pid): product_type(navn, kat, int(pid))
-        for pid, navn, kat in df.drop_duplicates("product_id")[
-            ["product_id", "product_name", "category"]
-        ].itertuples(index=False)
-    }
-    df["_type"] = df["product_id"].astype(int).map(typer)
-    df = df.dropna(subset=["_type"])
+    df = annotate(df).dropna(subset=["varetype"])
 
     # Varetyper etter antall ordrer, med variant-fordeling der det er valg.
     per_variant = (
-        df.groupby(["_type", "product_name"])["order_id"].nunique()
+        df.groupby(["varetype", "product_name"])["order_id"].nunique()
         .reset_index(name="n")
-        .sort_values(["_type", "n"], ascending=[True, False])
+        .sort_values(["varetype", "n"], ascending=[True, False])
     )
     type_orden = (
-        df.groupby("_type")["order_id"].nunique()
+        df.groupby("varetype")["order_id"].nunique()
         .sort_values(ascending=False).head(25)
     )
     valg_linjer = []
     for typ in type_orden.index:
-        varianter = per_variant[per_variant["_type"] == typ].head(3)
+        varianter = per_variant[per_variant["varetype"] == typ].head(3)
         deler = ", ".join(f"{r.product_name} ({r.n} ordrer)"
                           for r in varianter.itertuples())
         valg_linjer.append(f"- {typ}: {deler}")

@@ -18,6 +18,8 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
+import pandas as pd
+
 DATA_DIR = Path(__file__).parent.parent / "data"
 MAPPING_FILE = DATA_DIR / "product_types.json"
 
@@ -341,13 +343,35 @@ def product_type(name: str | None, category: str | None = None,
     return base
 
 
-def annotate_lines(lines):
-    """Legger til 'product_type'-kolonne på en DataFrame av lines."""
-    import pandas as pd
-    types = []
-    for _, r in lines.iterrows():
-        pid = int(r["product_id"]) if pd.notna(r.get("product_id")) else None
-        types.append(product_type(r.get("product_name"), r.get("category"), pid))
-    out = lines.copy()
-    out["product_type"] = types
+def annotate(df: pd.DataFrame) -> pd.DataFrame:
+    """Legger til kolonnen `varetype` på en tabell med produkt-linjer.
+
+    Dette er det eneste stedet varetype utledes for en tabell. Kallet er
+    idempotent: finnes kolonnen allerede, returneres tabellen urørt, så
+    hvert ledd i analysekjeden kan kalle den uten å betale for jobben på
+    nytt. Klassifiseringen gjøres én gang per unike (product_id,
+    product_name, category) og mappes tilbake på radene.
+    """
+    if "varetype" in df.columns:
+        return df
+    out = df.copy()
+    if out.empty:
+        out["varetype"] = pd.Series(dtype="object")
+        return out
+    if "category" in out.columns:
+        kategorier = out["category"]
+    else:
+        kategorier = pd.Series([None] * len(out), index=out.index)
+    sett: dict[tuple, str | None] = {}
+    typer = []
+    for pid, navn, kat in zip(out["product_id"], out["product_name"], kategorier):
+        nokkel = (pid, navn, kat)
+        if nokkel not in sett:
+            sett[nokkel] = product_type(
+                navn if pd.notna(navn) else None,
+                kat if pd.notna(kat) else None,
+                int(pid) if pd.notna(pid) else None,
+            )
+        typer.append(sett[nokkel])
+    out["varetype"] = typer
     return out

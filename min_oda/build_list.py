@@ -25,7 +25,7 @@ from .blocklist import blocked_ids, blocked_types
 from .data_loader import load_both
 from .representatives import chosen_representatives
 from .oda_client import LIST_URL, add_products, build_client, create_list
-from .product_types import product_type
+from .product_types import annotate
 from .restock import compute_cadence
 
 console = Console()
@@ -130,21 +130,17 @@ def curate(
         # det tomme rep-merge-et nedenfor. (apply på tom df returnerer
         # DataFrame, ikke Series, og krasjer kolonne-assignment i pandas 2.)
         return cadence.iloc[0:0]
-    df["_type"] = df.apply(
-        lambda r: product_type(r["product_name"], r.get("category"), r["product_id"]),
-        axis=1,
-    )
-    df = df.dropna(subset=["_type"])
+    df = annotate(df).dropna(subset=["varetype"])
     rep = (
-        df.groupby(["_type", "product_id", "product_name", "category"])["order_id"]
+        df.groupby(["varetype", "product_id", "product_name", "category"])["order_id"]
         .nunique()
         .reset_index(name="n_orders")
-        .sort_values(["_type", "n_orders"], ascending=[True, False])
-        .groupby("_type")
+        .sort_values(["varetype", "n_orders"], ascending=[True, False])
+        .groupby("varetype")
         .head(1)
         .drop(columns="n_orders")
         .reset_index(drop=True)
-        .rename(columns={"_type": "key"})
+        .rename(columns={"varetype": "key"})
     )
 
     out = cadence.drop(columns=["product_name", "category"]).merge(rep, on="key")

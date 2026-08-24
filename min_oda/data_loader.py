@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from .product_types import annotate
+
 DATA_DIR = Path(__file__).parent.parent / "data"
 
 
@@ -39,6 +41,7 @@ def load_lines(orders: pd.DataFrame | None = None) -> pd.DataFrame:
         - vat_pct      (float, if 'vat_percentage' exists)
         - year         (int, if 'date' joined)
         - month_num    (int, if 'date' joined)
+        - varetype     (str | None, se product_types.annotate)
     """
     lines = pd.read_csv(DATA_DIR / "lines.csv")
 
@@ -56,7 +59,7 @@ def load_lines(orders: pd.DataFrame | None = None) -> pd.DataFrame:
         lines["year"] = lines["date"].dt.year
         lines["month_num"] = lines["date"].dt.month
 
-    return lines
+    return annotate(lines)
 
 
 def load_both() -> tuple[pd.DataFrame, pd.DataFrame]:

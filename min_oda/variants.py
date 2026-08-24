@@ -10,27 +10,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from .product_types import product_type
-
-
-def _classify(lines: pd.DataFrame) -> pd.DataFrame:
-    """Returner kun rader med klassifisert varetype, med kolonnen `_type`.
-    Beregner product_type på unike (pid, name, category)-kombinasjoner og
-    joiner tilbake — sparer tid på store lines-tabeller."""
-    df = lines.dropna(subset=["product_id", "product_name", "category"]).copy()
-    if df.empty:
-        return df
-    df["product_id"] = df["product_id"].astype(int)
-    keys = df.drop_duplicates(subset=["product_id", "product_name", "category"])[
-        ["product_id", "product_name", "category"]
-    ]
-    keys = keys.assign(
-        _type=keys.apply(
-            lambda r: product_type(r["product_name"], r.get("category"), r["product_id"]),
-            axis=1,
-        )
-    )
-    return df.merge(keys, on=["product_id", "product_name", "category"], how="left")
+from .product_types import annotate
 
 
 def variants_for_type(
@@ -44,10 +24,12 @@ def variants_for_type(
 
     Kolonner: product_id, product_name, category, n_orders. Blokkerte
     produkter filtreres bort. Tom DataFrame hvis ingen treff."""
-    df = _classify(lines)
+    df = lines.dropna(subset=["product_id", "product_name", "category"]).copy()
     if df.empty:
         return pd.DataFrame(columns=["product_id", "product_name", "category", "n_orders"])
-    df = df[df["_type"] == key]
+    df["product_id"] = df["product_id"].astype(int)
+    df = annotate(df)
+    df = df[df["varetype"] == key]
     if blocked:
         df = df[~df["product_id"].isin(blocked)]
     if df.empty:

@@ -23,7 +23,7 @@ import pandas as pd
 
 from . import llm
 from .bakgrunnsjobb import Jobb
-from .product_types import annotate_lines
+from .product_types import annotate
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 INNSIKT_FILE = DATA_DIR / "innsikt_llm.json"
@@ -70,12 +70,12 @@ def _ordre_typer(df: pd.DataFrame) -> list[dict]:
     """[{order_id, date, typer}] per ordre, nyeste først. `typer` er det
     komplette settet — stift-filtreringen skjer først i promptbyggingen,
     så mønster-verifiseringen kan matche mot hele kurven."""
-    d = df.dropna(subset=["product_type", "order_id"])
+    d = df.dropna(subset=["varetype", "order_id"])
     if d.empty:
         return []
     per = (
         d.groupby("order_id")
-        .agg(date=("date", "first"), typer=("product_type", lambda s: set(s)))
+        .agg(date=("date", "first"), typer=("varetype", lambda s: set(s)))
         .reset_index()
         .sort_values("date", ascending=False)
     )
@@ -153,21 +153,21 @@ def _monstre(df: pd.DataFrame, chat) -> list[dict] | None:
 def _fakta_siden_sist(df: pd.DataFrame, today: pd.Timestamp) -> list[str]:
     """Deterministiske fakta-linjer for «siden sist»: nye gjengangere,
     stifter på vei ut, og kategori-skift siste 30 d mot 30 d før."""
-    d = df.dropna(subset=["product_type", "date"])
+    d = df.dropna(subset=["varetype", "date"])
     fakta: list[str] = []
     if d.empty:
         return fakta
 
-    per_type = d.groupby("product_type").agg(
+    per_type = d.groupby("varetype").agg(
         forste=("date", "min"), siste=("date", "max"),
         n_ordrer=("order_id", "nunique"),
     )
     navn_per_type = (
-        d.groupby(["product_type", "product_name"])["order_id"].nunique()
+        d.groupby(["varetype", "product_name"])["order_id"].nunique()
         .reset_index(name="n")
         .sort_values("n", ascending=False)
-        .drop_duplicates("product_type")
-        .set_index("product_type")["product_name"]
+        .drop_duplicates("varetype")
+        .set_index("varetype")["product_name"]
     )
 
     nye = per_type[
@@ -181,7 +181,7 @@ def _fakta_siden_sist(df: pd.DataFrame, today: pd.Timestamp) -> list[str]:
         )
 
     for typ, r in per_type[per_type["n_ordrer"] >= 6].iterrows():
-        datoer = sorted(d[d["product_type"] == typ]
+        datoer = sorted(d[d["varetype"] == typ]
                         .groupby("order_id")["date"].first())
         gap = [(b - a).days for a, b in zip(datoer, datoer[1:])]
         median = float(pd.Series(gap).median()) if gap else 0.0
@@ -239,7 +239,7 @@ def generer(lines: pd.DataFrame, chat=None,
         return {"feil": "Ingen LLM-provider tilgjengelig (jf. LLM_PROVIDER i .env)."}
     today = pd.Timestamp(today) if today is not None else pd.Timestamp.now()
 
-    df = annotate_lines(lines)
+    df = annotate(lines)
     # Ordre-datoene fra Oda er tz-bevisste (UTC); sammenligninger mot naive
     # Timestamp-er (today, testenes TODAY) krever naive datoer.
     df["date"] = pd.to_datetime(df["date"])
