@@ -100,7 +100,7 @@ def test_fakta_siden_sist():
 
 
 def test_generer_skriver_cache(tmp_path, monkeypatch, lines):
-    monkeypatch.setattr(innsikt_llm, "INNSIKT_FILE", tmp_path / "innsikt_llm.json")
+    monkeypatch.setattr(innsikt_llm.GENERERING, "fil", tmp_path / "innsikt_llm.json")
     svar = iter([
         json.dumps([{"navn": "Taco-kveld",
                      "varetyper": ["tortilla-lompe", "kjøttdeig", "taco"],
@@ -111,4 +111,4 @@ def test_generer_skriver_cache(tmp_path, monkeypatch, lines):
                             today=TODAY)
     assert "feil" not in r
     assert r["monstre"][0]["navn"] == "Taco-kveld"
-    assert innsikt_llm.load_innsikt() == r
+    assert innsikt_llm.GENERERING.last() == r

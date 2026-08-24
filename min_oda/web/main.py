@@ -365,17 +365,10 @@ def _start_forslag_jobb() -> None:
 
 def _forslag_ctx(auto_start: bool = False) -> dict:
     """Template-kontekst for _llm_forslag.html. `auto_start=True` (sidelast)
-    sparker i gang en generering hvis cachen er over et døgn gammel — innen
-    brukeren har jobbet seg gjennom lista er den typisk ferdig."""
-    if not llm.enabled():
-        return {"forslag": None, "forslag_kjorer": False, "forslag_feil": None}
-    if auto_start and not forslag.er_i_gang() and not forslag.er_ferskt():
-        _start_forslag_jobb()
-    return {
-        "forslag": forslag.load_forslag(),
-        "forslag_kjorer": forslag.er_i_gang(),
-        "forslag_feil": forslag.siste_feil(),
-    }
+    sparker i gang en generering hvis cachen er for gammel."""
+    return forslag.GENERERING.kontekst(
+        "forslag", _start_forslag_jobb if auto_start else None
+    )
 
 
 @app.get("/handleliste/llm-forslag", response_class=HTMLResponse)
@@ -390,7 +383,7 @@ def handleliste_llm_forslag_status(request: Request) -> HTMLResponse:
 def handleliste_llm_forslag(request: Request) -> HTMLResponse:
     """Tving en ny generering (Oppdater-knappen), uavhengig av cache-alder.
     Returnerer med en gang — fragmentet poller til jobben er ferdig."""
-    if llm.enabled() and not forslag.er_i_gang():
+    if llm.enabled() and not forslag.GENERERING.er_i_gang():
         _start_forslag_jobb()
     return templates.TemplateResponse(
         request, "_llm_forslag.html", _forslag_ctx()
@@ -795,16 +788,10 @@ async def handleliste_add_to_cart(request: Request) -> HTMLResponse:
 def _innsikt_llm_ctx(auto_start: bool = False) -> dict:
     """Template-kontekst for _innsikt_llm.html. Samme mønster som
     _forslag_ctx: sidelast starter en generering hvis cachen er gammel."""
-    if not llm.enabled():
-        return {"innsikt_llm": None, "innsikt_llm_kjorer": False,
-                "innsikt_llm_feil": None}
-    if auto_start and not innsikt_llm.er_i_gang() and not innsikt_llm.er_ferskt():
-        innsikt_llm.start_bakgrunnsjobb(lager.lines())
-    return {
-        "innsikt_llm": innsikt_llm.load_innsikt(),
-        "innsikt_llm_kjorer": innsikt_llm.er_i_gang(),
-        "innsikt_llm_feil": innsikt_llm.siste_feil(),
-    }
+    return innsikt_llm.GENERERING.kontekst(
+        "innsikt_llm",
+        (lambda: innsikt_llm.start_bakgrunnsjobb(lager.lines())) if auto_start else None,
+    )
 
 
 @app.get("/innsikt/llm", response_class=HTMLResponse)
@@ -818,7 +805,7 @@ def innsikt_llm_status(request: Request) -> HTMLResponse:
 @app.post("/innsikt/llm", response_class=HTMLResponse)
 def innsikt_llm_regenerer(request: Request) -> HTMLResponse:
     """Tving en ny generering (Oppdater-knappen), uavhengig av cache-alder."""
-    if llm.enabled() and not innsikt_llm.er_i_gang():
+    if llm.enabled() and not innsikt_llm.GENERERING.er_i_gang():
         innsikt_llm.start_bakgrunnsjobb(lager.lines())
     return templates.TemplateResponse(
         request, "_innsikt_llm.html", _innsikt_llm_ctx()

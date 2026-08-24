@@ -110,7 +110,7 @@ def test_nye_valideres_mot_katalogen(lines):
 
 
 def test_generer_skriver_cache(tmp_path, monkeypatch, rows, lines):
-    monkeypatch.setattr(forslag, "FORSLAG_FILE", tmp_path / "llm_forslag.json")
+    monkeypatch.setattr(forslag.GENERERING, "fil", tmp_path / "llm_forslag.json")
     svar_sparetips = json.dumps([{"key": "melk", "product_id": 101, "begrunnelse": "ok"}])
     svar_nye = json.dumps({"profil": ["obs"],
                            "forslag": [{"sok": "fiskesaus", "begrunnelse": "ok"}]})
@@ -123,23 +123,23 @@ def test_generer_skriver_cache(tmp_path, monkeypatch, rows, lines):
     assert "feil" not in resultat
     assert resultat["sparetips"][0]["product_id"] == 101
     assert resultat["nye"][0]["product_id"] == 500
-    assert forslag.load_forslag() == resultat
+    assert forslag.GENERERING.last() == resultat
 
 
 def test_er_ferskt(tmp_path, monkeypatch):
     fil = tmp_path / "llm_forslag.json"
-    monkeypatch.setattr(forslag, "FORSLAG_FILE", fil)
-    assert not forslag.er_ferskt()  # ingen fil
+    monkeypatch.setattr(forslag.GENERERING, "fil", fil)
+    assert not forslag.GENERERING.er_ferskt()  # ingen fil
     fil.write_text(json.dumps(
         {"generert": datetime.now().isoformat(timespec="minutes")}
     ))
-    assert forslag.er_ferskt()
+    assert forslag.GENERERING.er_ferskt()
     fil.write_text(json.dumps({"generert": "2026-01-01T00:00"}))
-    assert not forslag.er_ferskt()
+    assert not forslag.GENERERING.er_ferskt()
 
 
 def test_bakgrunnsjobb_single_flight(tmp_path, monkeypatch, rows, lines):
-    monkeypatch.setattr(forslag, "FORSLAG_FILE", tmp_path / "llm_forslag.json")
+    monkeypatch.setattr(forslag.GENERERING, "fil", tmp_path / "llm_forslag.json")
     startet = threading.Event()
     slipp = threading.Event()
 
@@ -152,21 +152,21 @@ def test_bakgrunnsjobb_single_flight(tmp_path, monkeypatch, rows, lines):
     t = forslag.start_bakgrunnsjobb(rows, lines, chat=treg_chat, search=search)
     assert t is not None
     assert startet.wait(5)
-    assert forslag.er_i_gang()
+    assert forslag.GENERERING.er_i_gang()
     # Single-flight: jobb nummer to avvises mens den første kjører.
     assert forslag.start_bakgrunnsjobb(rows, lines, chat=treg_chat, search=search) is None
     slipp.set()
     t.join(5)
-    assert not forslag.er_i_gang()
-    assert forslag.siste_feil()  # chat ga None -> feilen er registrert
+    assert not forslag.GENERERING.er_i_gang()
+    assert forslag.GENERERING.siste_feil()  # chat ga None -> feilen er registrert
 
 
 def test_generer_feil_roerer_ikke_cache(tmp_path, monkeypatch, rows, lines):
     fil = tmp_path / "llm_forslag.json"
     fil.write_text('{"generert": "2026-08-01T10:00", "sparetips": [], "nye": []}')
-    monkeypatch.setattr(forslag, "FORSLAG_FILE", fil)
+    monkeypatch.setattr(forslag.GENERERING, "fil", fil)
     resultat = forslag.generer(rows, lines,
                                chat=lambda s, u, max_tokens: None,
                                search=_search({"melk": MELK_HITS}))
     assert "feil" in resultat
-    assert forslag.load_forslag()["generert"] == "2026-08-01T10:00"
+    assert forslag.GENERERING.last()["generert"] == "2026-08-01T10:00"

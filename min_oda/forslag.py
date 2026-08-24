@@ -13,61 +13,31 @@ merker dem som ca.-priser.
 
 from __future__ import annotations
 
-import json
-from datetime import datetime
 from pathlib import Path
 
 import httpx
 import pandas as pd
 
 from . import llm
-from .bakgrunnsjobb import Jobb
+from .generering import Generering
 from .oda_client import search_products
 
 DATA_DIR = Path(__file__).parent.parent / "data"
-FORSLAG_FILE = DATA_DIR / "llm_forslag.json"
 
 _MAX_SPARETIPS_RADER = 25
 _MAX_KANDIDATER_PER_TYPE = 4
-FERSK_TIMER = 24.0
 
-_JOBB = Jobb("llm-forslag")
-
-
-def er_i_gang() -> bool:
-    return _JOBB.er_i_gang()
-
-
-def siste_feil() -> str | None:
-    return _JOBB.siste_feil()
-
-
-def er_ferskt(max_age_hours: float = FERSK_TIMER) -> bool:
-    f = load_forslag()
-    if not f or not f.get("generert"):
-        return False
-    try:
-        alder = datetime.now() - datetime.fromisoformat(f["generert"])
-    except ValueError:
-        return False
-    return alder.total_seconds() < max_age_hours * 3600
+# Bakgrunnstråd, cache-fil, ferskhet og template-kontekst: jf. generering.py.
+GENERERING = Generering("llm-forslag", DATA_DIR / "llm_forslag.json")
 
 
 def start_bakgrunnsjobb(rader, lines, chat=None, search=None):
-    """Start generer() i en daemon-tråd (single-flight, jf. bakgrunnsjobb).
+    """Start generer() i en daemon-tråd (single-flight).
     `rader`/`lines` beregnes av kalleren i request-konteksten; tråden rører
     ingen web-cacher."""
-    return _JOBB.start(lambda: generer(rader, lines, chat=chat, search=search))
-
-
-def load_forslag() -> dict | None:
-    """Sist genererte forslag, eller None hvis knappen aldri er trykket."""
-    if not FORSLAG_FILE.exists():
-        return None
-    try:
-        return json.loads(FORSLAG_FILE.read_text())
-    except (json.JSONDecodeError, OSError):
-        return None
+    return GENERERING.start(
+        lambda: generer(rader, lines, chat=chat, search=search)
+    )
 
 
 def _sparetips_kandidater(rader, search) -> list[dict]:
@@ -281,8 +251,8 @@ def generer(rader, lines: pd.DataFrame,
     Ved LLM-svikt returneres et feil-dict uten å røre forrige cache."""
     chat = chat or llm.chat
     search = search or search_products
-    if not llm.enabled() and chat is llm.chat:
-        return {"feil": "Ingen LLM-provider tilgjengelig (jf. LLM_PROVIDER i .env)."}
+    if feil := llm.mangler_provider(chat):
+        return {"feil": feil}
 
     sparetips = _sparetips(rader, chat, search)
     nye_resultat = _nye(lines, chat, search)
@@ -290,13 +260,8 @@ def generer(rader, lines: pd.DataFrame,
         return {"feil": "Fikk ikke brukbart svar fra språkmodellen. Prøv igjen."}
     profil, nye = nye_resultat if nye_resultat else ([], [])
 
-    forslag = {
-        "generert": datetime.now().isoformat(timespec="minutes"),
-        "provider": llm.provider_label(),
+    return GENERERING.lagre({
         "sparetips": sparetips or [],
         "profil": profil,
         "nye": nye,
-    }
-    FORSLAG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    FORSLAG_FILE.write_text(json.dumps(forslag, ensure_ascii=False, indent=1))
-    return forslag
+    })

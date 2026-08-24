@@ -18,6 +18,7 @@ import json
 import os
 import shutil
 import subprocess
+from typing import Callable
 
 from dotenv import load_dotenv
 
@@ -147,6 +148,17 @@ def chat(system: str, user: str, max_tokens: int = 2000) -> str | None:
         return _chat_codex_cli(system, user, max_tokens)
     if provider == "claude_cli":
         return _chat_claude_cli(system, user)
+    return None
+
+
+def mangler_provider(chat_fn: Callable) -> str | None:
+    """Feilmelding hvis en generering ikke har noen provider å spørre.
+
+    Sjekken gjelder bare vår egen chat(): er en annen implementasjon
+    injisert (tester, eller et annet lag), regnes den som tilgjengelig.
+    """
+    if chat_fn is chat and not enabled():
+        return "Ingen LLM-provider tilgjengelig (jf. LLM_PROVIDER i .env)."
     return None
 
 

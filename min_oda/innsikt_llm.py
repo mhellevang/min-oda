@@ -8,62 +8,31 @@ Samme arbeidsdeling som forslag.py — LLM-en får aldri regne:
 - Siden sist: nye gjengangere, stifter på vei ut og kategori-skift beregnes
   deterministisk (_fakta_siden_sist); modellen formulerer bare setningene.
 
-Kjøres i bakgrunnen (jf. bakgrunnsjobb.py) og caches i data/innsikt_llm.json
+Kjøres i bakgrunnen (jf. generering.py) og caches i data/innsikt_llm.json
 (gitignored), samme livssyklus som forslagene på handlelista.
 """
 
 from __future__ import annotations
 
-import json
 from collections import Counter
-from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
 from . import llm
-from .bakgrunnsjobb import Jobb
+from .generering import Generering
 from .product_types import annotate
 
 DATA_DIR = Path(__file__).parent.parent / "data"
-INNSIKT_FILE = DATA_DIR / "innsikt_llm.json"
 
-FERSK_TIMER = 24.0
 _STIFT_ANDEL = 0.5    # varetyper i over halvparten av ordrene skjules for LLM-en
 _MAX_ORDRER = 100
 _MIN_STOTTE = 3       # mønstre må finnes i minst så mange ordrer
 
-_JOBB = Jobb("llm-innsikt")
+# Bakgrunnstråd, cache-fil, ferskhet og template-kontekst: jf. generering.py.
+GENERERING = Generering("llm-innsikt", DATA_DIR / "innsikt_llm.json")
 
 _UKEDAGER = ["man", "tir", "ons", "tor", "fre", "lør", "søn"]
-
-
-def er_i_gang() -> bool:
-    return _JOBB.er_i_gang()
-
-
-def siste_feil() -> str | None:
-    return _JOBB.siste_feil()
-
-
-def load_innsikt() -> dict | None:
-    if not INNSIKT_FILE.exists():
-        return None
-    try:
-        return json.loads(INNSIKT_FILE.read_text())
-    except (json.JSONDecodeError, OSError):
-        return None
-
-
-def er_ferskt(max_age_hours: float = FERSK_TIMER) -> bool:
-    f = load_innsikt()
-    if not f or not f.get("generert"):
-        return False
-    try:
-        alder = datetime.now() - datetime.fromisoformat(f["generert"])
-    except ValueError:
-        return False
-    return alder.total_seconds() < max_age_hours * 3600
 
 
 def _ordre_typer(df: pd.DataFrame) -> list[dict]:
@@ -236,8 +205,8 @@ def generer(lines: pd.DataFrame, chat=None,
     (`today` må være tz-bevisst UTC, jf. data_loader.load_lines).
     Ved LLM-svikt returneres et feil-dict uten å røre forrige cache."""
     chat = chat or llm.chat
-    if not llm.enabled() and chat is llm.chat:
-        return {"feil": "Ingen LLM-provider tilgjengelig (jf. LLM_PROVIDER i .env)."}
+    if feil := llm.mangler_provider(chat):
+        return {"feil": feil}
     # `today` er tz-bevisst UTC, samme konvensjon som load_lines og
     # restock.compute_cadence. Ett tidsregime i hele analysekjeden.
     today = pd.Timestamp(today) if today is not None else pd.Timestamp.now(tz="UTC")
@@ -249,17 +218,12 @@ def generer(lines: pd.DataFrame, chat=None,
     if monstre is None and siden is None:
         return {"feil": "Fikk ikke brukbart svar fra språkmodellen. Prøv igjen."}
 
-    innsikt = {
-        "generert": datetime.now().isoformat(timespec="minutes"),
-        "provider": llm.provider_label(),
+    return GENERERING.lagre({
         "monstre": monstre or [],
         "siden_sist": siden or "",
-    }
-    INNSIKT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    INNSIKT_FILE.write_text(json.dumps(innsikt, ensure_ascii=False, indent=1))
-    return innsikt
+    })
 
 
 def start_bakgrunnsjobb(lines: pd.DataFrame, chat=None):
-    """Start generer() i en daemon-tråd (single-flight, jf. bakgrunnsjobb)."""
-    return _JOBB.start(lambda: generer(lines, chat=chat))
+    """Start generer() i en daemon-tråd (single-flight)."""
+    return GENERERING.start(lambda: generer(lines, chat=chat))
