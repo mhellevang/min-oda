@@ -16,11 +16,11 @@ from __future__ import annotations
 import json
 import re
 from functools import lru_cache
-from pathlib import Path
 
 import pandas as pd
 
-DATA_DIR = Path(__file__).parent.parent / "data"
+from .filer import DATA_DIR
+
 MAPPING_FILE = DATA_DIR / "product_types.json"
 
 

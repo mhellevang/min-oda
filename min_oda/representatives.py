@@ -16,8 +16,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from .blocklist import _load_from, _save_to
-from .data_loader import DATA_DIR
+from .filer import DATA_DIR, les, skriv
 
 CHOSEN_PATH = DATA_DIR / "chosen_products.json"
 
@@ -30,7 +29,7 @@ def chosen_representatives() -> dict[str, dict]:
     """Varetype-nøkkel → snapshot av valgt produkt
     (product_id, name, price, image, added)."""
     out: dict[str, dict] = {}
-    for key, info in _load_from(CHOSEN_PATH).items():
+    for key, info in les(CHOSEN_PATH).items():
         if isinstance(info, dict) and info.get("product_id"):
             out[str(key)] = info
     return out
@@ -53,7 +52,7 @@ def pinned_types() -> dict[int, str]:
 def choose(key: str, product_id: int, name: str = "",
            price: float | None = None, image: str = "") -> None:
     """Sett (eller bytt) valgt representant for en varetype."""
-    raw = _load_from(CHOSEN_PATH)
+    raw = les(CHOSEN_PATH)
     raw[str(key)] = {
         "product_id": int(product_id),
         "name": name,
@@ -61,10 +60,10 @@ def choose(key: str, product_id: int, name: str = "",
         "image": image,
         "added": date.today().isoformat(),
     }
-    _save_to(CHOSEN_PATH, raw)
+    skriv(CHOSEN_PATH, raw)
 
 
 def unchoose(key: str) -> None:
-    raw = _load_from(CHOSEN_PATH)
+    raw = les(CHOSEN_PATH)
     if raw.pop(str(key), None) is not None:
-        _save_to(CHOSEN_PATH, raw)
+        skriv(CHOSEN_PATH, raw)

@@ -28,10 +28,9 @@ from ..handleliste import (
     EMPTY_CART,
     Kilder,
 )
-from ..images import latest_product_images
 from ..oda_client import MissingCredentials, build_client
-from ..prices import latest_unit_prices
 from ..restock import compute_cadence
+from ..siste_kjop import siste_bilder, siste_priser
 
 # Hva som kan endre seg under appen.
 DATA = "data"                  # ny fetch fra Oda
@@ -108,12 +107,12 @@ def kadens() -> pd.DataFrame:
 
 def priser() -> dict[int, float]:
     """Sist betalt enhetspris per produkt."""
-    return _husk("priser", lambda: latest_unit_prices(lines()))
+    return _husk("priser", lambda: siste_priser(lines()))
 
 
 def bilder() -> dict[int, str]:
     """Bilde-URL per produkt, fra siste kjøp."""
-    return _husk("bilder", lambda: latest_product_images(lines()))
+    return _husk("bilder", lambda: siste_bilder(lines()))
 
 
 def baseline_ids() -> set[int]:

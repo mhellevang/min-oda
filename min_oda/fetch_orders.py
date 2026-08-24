@@ -29,8 +29,8 @@ from .oda_client import (
     password_auth_configured,
     try_get,
 )
+from .filer import DATA_DIR
 
-DATA_DIR = Path(__file__).parent.parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
 
 # Endepunkt vi vet virker per mai 2026. Hvis Oda endrer det, finn ny URL

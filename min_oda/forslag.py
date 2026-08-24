@@ -7,22 +7,19 @@ bakgrunnstråd: sidelast starter den automatisk når cachen i
 data/llm_forslag.json (gitignored) er eldre enn et døgn, og fragmentet i
 UI-et poller til den er ferdig. Ingen request venter på LLM-en — viktig bak
 Cloudflare-tunnelen, som kutter svar etter ~100 s. Priser sammenlignes mot
-sist betalt enhetspris (jf. prices.py), som kan være litt utdatert — UI-et
+sist betalt enhetspris (jf. siste_kjop.py), som kan være litt utdatert — UI-et
 merker dem som ca.-priser.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import httpx
 import pandas as pd
 
 from . import llm
+from .filer import DATA_DIR
 from .generering import Generering
 from .oda_client import search_products
-
-DATA_DIR = Path(__file__).parent.parent / "data"
 
 _MAX_SPARETIPS_RADER = 25
 _MAX_KANDIDATER_PER_TYPE = 4

@@ -6,13 +6,10 @@ appeared in nearly every script.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pandas as pd
 
+from .filer import DATA_DIR
 from .product_types import annotate
-
-DATA_DIR = Path(__file__).parent.parent / "data"
 
 
 def load_orders() -> pd.DataFrame:

@@ -15,15 +15,13 @@ Kjøres i bakgrunnen (jf. generering.py) og caches i data/innsikt_llm.json
 from __future__ import annotations
 
 from collections import Counter
-from pathlib import Path
 
 import pandas as pd
 
 from . import llm
+from .filer import DATA_DIR
 from .generering import Generering
 from .product_types import annotate
-
-DATA_DIR = Path(__file__).parent.parent / "data"
 
 _STIFT_ANDEL = 0.5    # varetyper i over halvparten av ordrene skjules for LLM-en
 _MAX_ORDRER = 100
