@@ -20,3 +20,5 @@ plots/
 *.ipynb_meta
 
 .DS_Store
+
+.codegraph/
